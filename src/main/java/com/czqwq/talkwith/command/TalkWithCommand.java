@@ -7,6 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
+import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
@@ -31,7 +32,17 @@ public class TalkWithCommand extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/talkwith [baseurl|keyset|model|system_prompt|reload|history|join|single|share|mute|unmute|kick|cooldown|close]";
+        return StatCollector.translateToLocal("talkwith.command.usage");
+    }
+
+    /**
+     * Returns true when server-side features are available: either the dedicated server has
+     * the mod installed (signalled by the handshake packet) or we are running on an integrated
+     * server (singleplayer or LAN opened-to-LAN), where the mod is always present.
+     */
+    private static boolean serverFeatureAvailable() {
+        return ClientProxy.serverHasMod || Minecraft.getMinecraft()
+            .isIntegratedServerRunning();
     }
 
     @Override
@@ -47,13 +58,13 @@ public class TalkWithCommand extends CommandBase {
         switch (args[0].toLowerCase()) {
             case "baseurl" -> {
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith baseurl <url>");
+                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.baseurl.show", Config.baseUrl));
                     return;
                 }
                 Config.baseUrl = args[1];
                 Config.save();
-                TextUtils.info("Base URL set to: " + Config.baseUrl);
-                TextUtils.info("Pinging API...");
+                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.baseurl.set", Config.baseUrl));
+                TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
                 ApiPinger.ping();
             }
             case "keyset" -> {
@@ -63,18 +74,18 @@ public class TalkWithCommand extends CommandBase {
                 }
                 Config.apiKey = args[1];
                 Config.save();
-                TextUtils.info("API key updated.");
-                TextUtils.info("Pinging API...");
+                TextUtils.info(StatCollector.translateToLocal("talkwith.api.key_updated"));
+                TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
                 ApiPinger.ping();
             }
             case "model" -> {
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith model <name>");
+                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.model.show", Config.model));
                     return;
                 }
                 Config.model = args[1];
                 Config.save();
-                TextUtils.info("Model set to: " + Config.model);
+                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.model.set", Config.model));
             }
             case "system_prompt" -> {
                 if (args.length < 2) {
@@ -83,11 +94,11 @@ public class TalkWithCommand extends CommandBase {
                 }
                 Config.systemPrompt = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
                 Config.save();
-                TextUtils.info("System prompt updated.");
+                TextUtils.info(StatCollector.translateToLocal("talkwith.system_prompt.set"));
             }
             case "reload" -> {
                 Config.load();
-                TextUtils.info("Configuration reloaded.");
+                TextUtils.info(StatCollector.translateToLocal("talkwith.config.reloaded"));
             }
             case "history" -> {
                 if (args.length < 2) {
@@ -96,20 +107,22 @@ public class TalkWithCommand extends CommandBase {
                 }
                 if (args[1].equalsIgnoreCase("clear")) {
                     ClientProxy.clientSession.clear();
-                    TextUtils.info("Chat history cleared.");
+                    TextUtils.info(StatCollector.translateToLocal("talkwith.history.cleared"));
                 } else if (args[1].equalsIgnoreCase("show")) {
-                    TextUtils.info("History: " + ClientProxy.clientSession.size() + " messages.");
+                    TextUtils.info(
+                        StatCollector
+                            .translateToLocalFormatted("talkwith.history.show", ClientProxy.clientSession.size()));
                 } else {
-                    TextUtils.error("Unknown history sub-command: " + args[1]);
+                    TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.history.unknown", args[1]));
                 }
             }
             case "join" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith join <sessionId>");
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.join_usage"));
                     return;
                 }
                 String sessionId = args[1];
@@ -117,8 +130,8 @@ public class TalkWithCommand extends CommandBase {
                 PacketHandler.INSTANCE.sendToServer(new PacketJoinSession(sessionId));
             }
             case "single" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 ClientProxy.currentSessionId = null;
@@ -126,68 +139,69 @@ public class TalkWithCommand extends CommandBase {
             }
             // --- Server session management (requires server to have TalkWith) ---
             case "share" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith share <playerName>");
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.share_usage"));
                     return;
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("share", args[1]));
             }
             case "mute" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith mute <playerName>");
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.mute_usage"));
                     return;
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("mute", args[1]));
             }
             case "unmute" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith unmute <playerName>");
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.unmute_usage"));
                     return;
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("unmute", args[1]));
             }
             case "kick" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith kick <playerName>");
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.kick_usage"));
                     return;
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("kick", args[1]));
             }
             case "cooldown" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error("Usage: /talkwith cooldown <seconds>");
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.cooldown_usage"));
                     return;
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cooldown", args[1]));
             }
             case "close" -> {
-                if (!ClientProxy.serverHasMod) {
-                    TextUtils.error("Server does not have TalkWith installed.");
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("close", ""));
             }
-            default -> TextUtils.error("Unknown sub-command. " + getCommandUsage(sender));
+            default -> TextUtils
+                .error(StatCollector.translateToLocalFormatted("talkwith.unknown_sub", getCommandUsage(sender)));
         }
     }
 

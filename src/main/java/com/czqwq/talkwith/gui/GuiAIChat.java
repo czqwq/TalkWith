@@ -5,6 +5,7 @@ import java.util.List;
 
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
@@ -13,6 +14,15 @@ import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketSessionMessage;
 
 public class GuiAIChat extends GuiScreen {
+
+    /** Maximum number of visible lines in the chat history area. */
+    private static final int MAX_VISIBLE_LINES = 10;
+    /** Height of the input field. */
+    private static final int INPUT_HEIGHT = 20;
+    /** Vertical padding above the input field. */
+    private static final int INPUT_PAD = 2;
+    /** Horizontal margin. */
+    private static final int MARGIN = 4;
 
     private final List<String> lines = new ArrayList<>();
     private GuiTextField inputField;
@@ -28,7 +38,13 @@ public class GuiAIChat extends GuiScreen {
 
     @Override
     public void initGui() {
-        inputField = new GuiTextField(fontRendererObj, 4, height - 24, width - 8, 20);
+        // Input field sits at the very bottom, full width minus margins
+        inputField = new GuiTextField(
+            fontRendererObj,
+            MARGIN,
+            height - INPUT_HEIGHT - INPUT_PAD,
+            width - MARGIN * 2,
+            INPUT_HEIGHT);
         inputField.setMaxStringLength(512);
         inputField.setFocused(true);
         if (initialText != null && !initialText.isEmpty()) {
@@ -39,40 +55,62 @@ public class GuiAIChat extends GuiScreen {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        drawRect(0, 0, width, height - 28, 0xCC000000);
-        drawRect(0, height - 28, width, height - 27, 0xFF888888);
-        drawRect(2, height - 26, width - 2, height - 5, 0xFF000000);
-
         int lineHeight = fontRendererObj.FONT_HEIGHT + 2;
-        int maxVisibleLines = (height - 32) / lineHeight;
-        int startY = height - 30 - lineHeight;
 
-        // Render from bottom up
-        for (int i = lines.size() - 1; i >= 0 && startY > 0; i--) {
-            String line = lines.get(i);
-            List<String> wrapped = wrapLine(line, width - 8);
-            for (int j = wrapped.size() - 1; j >= 0 && startY > 0; j--) {
-                fontRendererObj.drawStringWithShadow(wrapped.get(j), 4, startY, 0xFFFFFF);
-                startY -= lineHeight;
-            }
+        // Gather the lines to display (thinking indicator counts as one line)
+        List<String> display = buildDisplayLines(lineHeight);
+
+        // Compute the bounding box of just the visible content area
+        int visibleCount = Math.min(display.size(), MAX_VISIBLE_LINES);
+        int chatAreaHeight = visibleCount * lineHeight;
+
+        // Y coordinate where the chat text area starts (above the input row)
+        int inputTop = height - INPUT_HEIGHT - INPUT_PAD * 2;
+        int chatAreaBottom = inputTop - 2; // small gap between chat and input
+        int chatAreaTop = chatAreaBottom - chatAreaHeight;
+
+        // Draw the entire pane: semi-transparent dark background (vanilla-like)
+        if (visibleCount > 0) {
+            drawRect(0, chatAreaTop - 2, width, chatAreaBottom, 0x90000000);
         }
+        // Draw slightly more opaque background for input area
+        drawRect(0, inputTop - 2, width, height, 0xB0000000);
+        // Separator line between chat and input
+        drawRect(0, inputTop - 2, width, inputTop - 1, 0xFF555555);
 
-        if (isThinking) {
-            StringBuilder dotBuilder = new StringBuilder();
-            int dotCount = (thinkingTick / 10) % 4;
-            for (int d = 0; d < dotCount; d++) dotBuilder.append('.');
-            String dots = dotBuilder.toString();
-            fontRendererObj.drawStringWithShadow("§7AI is thinking" + dots, 4, startY > 0 ? startY : 4, 0xFFFFFF);
+        // Render visible lines from bottom up
+        int y = chatAreaBottom - lineHeight;
+        for (int i = display.size() - 1; i >= 0 && i >= display.size() - MAX_VISIBLE_LINES; i--) {
+            fontRendererObj.drawStringWithShadow(display.get(i), MARGIN, y, 0xFFFFFF);
+            y -= lineHeight;
         }
 
         inputField.drawTextBox();
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
+    /**
+     * Build the list of display lines, wrapping long lines and appending the
+     * thinking indicator when applicable.
+     */
+    private List<String> buildDisplayLines(int lineHeight) {
+        List<String> display = new ArrayList<>();
+        for (String line : lines) {
+            display.addAll(wrapLine(line, width - MARGIN * 2));
+        }
+        if (isThinking) {
+            StringBuilder dotBuilder = new StringBuilder();
+            int dotCount = (thinkingTick / 10) % 4;
+            for (int d = 0; d < dotCount; d++) dotBuilder.append('.');
+            display.add("§7" + StatCollector.translateToLocal("talkwith.gui.thinking") + dotBuilder);
+        }
+        return display;
+    }
+
     @SuppressWarnings("unchecked")
     private List<String> wrapLine(String text, int maxWidth) {
         if (fontRendererObj.getStringWidth(text) <= maxWidth) {
-            List<String> single = new java.util.ArrayList<>();
+            List<String> single = new ArrayList<>();
             single.add(text);
             return single;
         }
@@ -101,7 +139,7 @@ public class GuiAIChat extends GuiScreen {
             .trim();
         if (text.isEmpty()) return;
 
-        lines.add("§eYou: §f" + text);
+        lines.add("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
         inputField.setText("");
         isThinking = true;
 

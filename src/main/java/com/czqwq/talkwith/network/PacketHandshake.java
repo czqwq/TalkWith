@@ -1,5 +1,7 @@
 package com.czqwq.talkwith.network;
 
+import net.minecraft.util.StatCollector;
+
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.util.TextUtils;
 
@@ -21,8 +23,8 @@ public class PacketHandshake implements IMessage {
         @Override
         public IMessage onMessage(PacketHandshake msg, MessageContext ctx) {
             ClientProxy.serverHasMod = true;
-            ClientProxy.scheduleOnMainThread(
-                () -> TextUtils.info("Server has TalkWith! Use /talkwith share <player> to start a shared session."));
+            ClientProxy
+                .scheduleOnMainThread(() -> TextUtils.info(StatCollector.translateToLocal("talkwith.server.has_mod")));
             return null;
         }
     }
