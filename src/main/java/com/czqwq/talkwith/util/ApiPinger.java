@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,7 +30,7 @@ public class ApiPinger {
                     ClientProxy.scheduleOnMainThread(() -> TextUtils.info("API available \u2713"));
                 } else {
                     InputStream err = conn.getErrorStream();
-                    String msg = err != null ? new String(readStream(err)) : "HTTP " + status;
+                    String msg = err != null ? new String(readStream(err), StandardCharsets.UTF_8) : "HTTP " + status;
                     ClientProxy.scheduleOnMainThread(() -> TextUtils.error("API unavailable: " + msg));
                 }
             } catch (Exception e) {

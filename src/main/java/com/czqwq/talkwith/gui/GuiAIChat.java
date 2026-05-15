@@ -1,14 +1,17 @@
 package com.czqwq.talkwith.gui;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
+import com.czqwq.talkwith.TalkWith;
 import com.czqwq.talkwith.ai.AIClient;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketSessionMessage;
@@ -23,6 +26,42 @@ public class GuiAIChat extends GuiScreen {
     private static final int INPUT_PAD = 2;
     /** Horizontal margin. */
     private static final int MARGIN = 4;
+
+    /**
+     * Cached reflection handle for {@code FontRenderer.unicodeFlag}.
+     * The field is private in GTNH's Forge build, so we must use reflection to
+     * force Unicode glyph page rendering for non-ASCII text.
+     */
+    private static final Field UNICODE_FLAG_FIELD;
+
+    static {
+        Field f = null;
+        try {
+            f = FontRenderer.class.getDeclaredField("unicodeFlag");
+            f.setAccessible(true);
+        } catch (Exception e) {
+            TalkWith.LOG.warn("Could not access FontRenderer.unicodeFlag via reflection: " + e.getMessage());
+        }
+        UNICODE_FLAG_FIELD = f;
+    }
+
+    private boolean getUnicodeFlag() {
+        if (UNICODE_FLAG_FIELD == null) return false;
+        try {
+            return UNICODE_FLAG_FIELD.getBoolean(fontRendererObj);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void setUnicodeFlag(boolean value) {
+        if (UNICODE_FLAG_FIELD == null) return;
+        try {
+            UNICODE_FLAG_FIELD.setBoolean(fontRendererObj, value);
+        } catch (Exception e) {
+            // ignore – rendering will fall back to whatever the font renderer defaults to
+        }
+    }
 
     private final List<String> lines = new ArrayList<>();
     private GuiTextField inputField;
@@ -55,6 +94,19 @@ public class GuiAIChat extends GuiScreen {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        // Enable the Unicode glyph pages for this entire draw pass so that
+        // Chinese and other non-ASCII characters render correctly instead of
+        // appearing as squares or garbage.
+        boolean savedUnicode = getUnicodeFlag();
+        setUnicodeFlag(true);
+        try {
+            drawScreenInternal(mouseX, mouseY, partialTicks);
+        } finally {
+            setUnicodeFlag(savedUnicode);
+        }
+    }
+
+    private void drawScreenInternal(int mouseX, int mouseY, float partialTicks) {
         int lineHeight = fontRendererObj.FONT_HEIGHT + 2;
 
         // Gather the lines to display (thinking indicator counts as one line)
