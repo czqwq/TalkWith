@@ -103,10 +103,8 @@ public class TalkWithCommand extends CommandBase {
                             .translateToLocalFormatted("talkwith.status.session", ClientProxy.currentSessionId));
                 } else {
                     TextUtils.info(
-                        StatCollector.translateToLocalFormatted(
-                            "talkwith.status.client",
-                            Config.baseUrl,
-                            Config.model));
+                        StatCollector
+                            .translateToLocalFormatted("talkwith.status.client", Config.baseUrl, Config.model));
                 }
             }
             case "history" -> {
@@ -270,6 +268,7 @@ public class TalkWithCommand extends CommandBase {
             }
             case "list" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("list", ""));
             case "info" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("info", ""));
+            case "leave" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("leave", ""));
             case "invite" -> {
                 if (args.length < 3) {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.session.invite_usage"));
@@ -305,6 +304,13 @@ public class TalkWithCommand extends CommandBase {
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cooldown", args[2]));
             }
+            case "history" -> {
+                if (args.length >= 3 && args[2].equalsIgnoreCase("clear")) {
+                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("history_clear", ""));
+                } else {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.history_usage"));
+                }
+            }
             default -> TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
         }
     }
@@ -320,6 +326,7 @@ public class TalkWithCommand extends CommandBase {
                 "model",
                 "system_prompt",
                 "reload",
+                "status",
                 "history",
                 "session",
                 "join",
@@ -344,15 +351,20 @@ public class TalkWithCommand extends CommandBase {
                     "join",
                     "list",
                     "info",
+                    "leave",
                     "invite",
                     "kick",
                     "mute",
                     "unmute",
-                    "cooldown");
+                    "cooldown",
+                    "history");
             }
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("session") && args[1].equalsIgnoreCase("server")) {
             return getListOfStringsMatchingLastWord(args, "create", "setting");
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("session") && args[1].equalsIgnoreCase("history")) {
+            return getListOfStringsMatchingLastWord(args, "clear");
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("session")
             && args[1].equalsIgnoreCase("server")

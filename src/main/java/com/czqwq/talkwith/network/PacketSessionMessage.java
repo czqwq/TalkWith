@@ -10,6 +10,7 @@ import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.AIClient;
+import com.czqwq.talkwith.ai.SessionPersistence;
 import com.czqwq.talkwith.ai.SharedSession;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -90,6 +91,7 @@ public class PacketSessionMessage implements IMessage {
                     session.session.addMessage("assistant", reply);
                     session.lastReplyTime = System.currentTimeMillis();
                     session.addRecentMessage(playerName, msg.message, reply);
+                    SessionPersistence.save(session);
                     broadcastToSession(session, playerName, msg.message, reply, server);
                 },
                 error -> broadcastErrorToSession(session, error, server));

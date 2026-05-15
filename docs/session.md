@@ -14,21 +14,84 @@ TalkWith 支持两种运行模式：
 
 ---
 
+## Session State Machine / 会话状态机
+
+```
+[Client Mode] ──── session server create ────► [Server Session: Owner]
+                                                       │
+                         session invite / join ◄───────┤
+                                                       │
+[Client Mode] ◄──────────────────────────── [Server Session: Member]
+
+[Server Session: Owner] ── leave (transfers ownership) ──► [Client Mode]
+[Server Session: Owner] ── delete / close ──► closes session for all members
+[Server Session: Member] ── leave ──► [Client Mode]
+```
+
+**Roles / 角色**
+
+| Role / 角色 | Permissions / 权限 |
+|---|---|
+| Owner / 所有者 | All settings, kick, mute/unmute, cooldown, close, history clear |
+| Member / 成员 | Send messages (if not muted), leave |
+
+**Disconnect behavior / 断线行为**
+
+- Owner disconnects with online members → ownership automatically transferred to the next online member.
+- Owner disconnects with no online members → session removed from memory; **history file kept on disk** and restored on next server start.
+- Member disconnects → silently removed from the session.
+
+---
+
+## Conversation History Persistence / 对话历史持久化
+
+Server-side session history is automatically saved to disk after each AI reply:
+
+```
+config/talkwith/sessions/<sessionId>.json
+```
+
+On server restart, all saved sessions are restored (with their full conversation history). Players need to manually rejoin after a restart via `/talkwith session join <id>` or `/talkwith session list`.
+
+To permanently wipe a session's history, use `/talkwith session history clear` (owner only).
+
+服务端会话的对话历史在每次 AI 回复后自动保存到磁盘：
+
+```
+config/talkwith/sessions/<sessionId>.json
+```
+
+服务端重启后，所有已保存的会话（含完整对话历史）会自动恢复。玩家重新加入后可继续之前的对话。使用 `/talkwith session history clear`（仅所有者）可永久清空历史记录。
+
+---
+
 ## The `>` Chat Shortcut / `>` 聊天快捷方式
 
 Type `> <message>` in chat to send a message to AI without using a command.
 
-- If you are in a **server session**, the message is sent to the session's AI on the server and broadcast to all session members.
+- If you are in a **server session**, the message is sent to the session's AI on the server and broadcast to all session members. Mute and cooldown rules are enforced.
 - If you are in **client mode**, the message is sent to your local AI and the reply appears in your own chat.
 
 在聊天框输入 `> <消息>` 可以快速发送 AI 消息，无需命令。
 
-- 若处于**服务端会话**中，消息将在服务端处理并广播给所有会话成员。
+- 若处于**服务端会话**中，消息将在服务端处理并广播给所有会话成员（受禁言/冷却规则约束）。
 - 若处于**客户端模式**，消息由本地 AI 处理，回复仅显示在你的聊天框中。
 
 ---
 
 ## Command Reference / 命令参考
+
+### Check Current Status / 查看当前状态
+
+```
+/talkwith status
+```
+
+Shows your current mode (client or server session) and relevant details without querying the server.
+
+显示你当前的模式（客户端或服务端会话）及相关信息，无需查询服务端。
+
+---
 
 ### Session Management / 会话管理
 
@@ -42,9 +105,9 @@ All session commands require the server to have TalkWith installed (or you are t
 /talkwith session server create
 ```
 
-Creates a new shared session and sets you as the owner. Your client automatically enters this session.
+Creates a new shared session and sets you as the owner. Your client automatically enters this session. Fails if you are already in a session.
 
-创建一个新的共享会话，并将你设为所有者。你的客户端自动加入该会话。
+创建一个新的共享会话，并将你设为所有者。你的客户端自动加入该会话。若你已在某会话中则返回错误。
 
 #### Switch to Client Mode / 切换回客户端模式
 
@@ -52,9 +115,19 @@ Creates a new shared session and sets you as the owner. Your client automaticall
 /talkwith session client
 ```
 
-Leaves the current server session (if any) and returns to local client mode.
+Closes your owned session (and notifies all members) OR leaves a joined session. Returns you to local client mode.
 
-退出当前服务端会话（如有），切换回本地客户端模式。
+关闭你拥有的会话（并通知所有成员）或退出你加入的会话，切换回本地客户端模式。
+
+#### Leave a Session / 退出会话
+
+```
+/talkwith session leave
+```
+
+Leaves the current session without deleting it. If you are the owner, ownership is transferred to the next online member. If no other members are online, the session is closed but **history is preserved on disk**.
+
+退出当前会话而不删除它。若你是所有者，所有权将转移给下一个在线成员。若无其他在线成员，会话关闭但**历史记录保留在磁盘上**。
 
 #### Delete Your Session / 删除会话
 
@@ -62,9 +135,9 @@ Leaves the current server session (if any) and returns to local client mode.
 /talkwith session delete
 ```
 
-Closes the session you own and notifies all members. Everyone returns to client mode.
+Closes the session you own and notifies all members. Everyone returns to client mode. **Also deletes the history file.**
 
-关闭你拥有的会话并通知所有成员，所有人切换回客户端模式。
+关闭你拥有的会话并通知所有成员，所有人切换回客户端模式。**同时删除历史文件。**
 
 #### Join a Session / 加入会话
 
@@ -72,9 +145,9 @@ Closes the session you own and notifies all members. Everyone returns to client 
 /talkwith session join <sessionId>
 ```
 
-Joins an existing session by its ID (usually received via invite).
+Joins an existing session by its ID (usually received via invite). On join, you receive the last 5 exchanges as history.
 
-通过会话 ID 加入现有会话（通常通过邀请获得）。
+通过会话 ID 加入现有会话（通常通过邀请获得）。加入时会收到最近 5 条交互记录作为历史同步。
 
 #### Invite a Player / 邀请玩家
 
@@ -92,9 +165,9 @@ Sends an invite to another online player. They will see a clickable message to j
 /talkwith session list
 ```
 
-Shows all active server sessions.
+Shows all active server sessions (including restored sessions from disk).
 
-显示所有活跃的服务端会话。
+显示所有活跃的服务端会话（包括从磁盘恢复的会话）。
 
 #### Session Info / 会话信息
 
@@ -171,15 +244,25 @@ Sets the minimum time between AI replies (default from global config).
 
 设置 AI 回复之间的最小间隔（默认使用全局配置）。
 
+#### Clear History / 清空历史记录
+
+```
+/talkwith session history clear
+```
+
+Clears the session's full conversation history (in memory and on disk). The AI will have no memory of previous exchanges after this.
+
+清空会话的完整对话历史（内存和磁盘同步清空）。执行后 AI 将不记得之前的任何对话。
+
 #### Close Session / 关闭会话
 
 ```
 /talkwith session close
 ```
 
-Same as `delete` — closes the session and notifies all members.
+Same as `delete` — closes the session, notifies all members, and deletes the history file.
 
-与 `delete` 相同，关闭会话并通知所有成员。
+与 `delete` 相同，关闭会话并通知所有成员，同时删除历史文件。
 
 ---
 
@@ -211,9 +294,9 @@ Same as singleplayer. The `>` shortcut works. If you want friends to share the s
 
 ### Dedicated Server / 专用服务器
 
-Same flow as LAN, but TalkWith must be installed on the server. The server owner sets their API key on the session:
+Same flow as LAN. Session history persists across restarts — after a server restart, the session is automatically restored. Players can rejoin and continue the conversation:
 
-流程与局域网相同，但服务端需安装 TalkWith。会话所有者需为该会话设置 API 密钥：
+流程与局域网相同。**会话历史在服务端重启后自动恢复**，玩家重新加入即可继续之前的对话：
 
 ```
 /talkwith session server create
@@ -222,6 +305,12 @@ Same flow as LAN, but TalkWith must be installed on the server. The server owner
 /talkwith session server setting model gpt-4o
 /talkwith session invite <player1>
 /talkwith session invite <player2>
+```
+
+After restart / 重启后：
+```
+/talkwith session list          # see restored sessions / 查看已恢复的会话
+/talkwith session join <id>     # rejoin and continue / 重新加入并继续
 ```
 
 ---
@@ -242,3 +331,4 @@ The following commands from older versions still work:
 | `/talkwith unmute <player>` | `/talkwith session unmute <player>` |
 | `/talkwith cooldown <sec>` | `/talkwith session cooldown <sec>` |
 | `/talkwith close` | `/talkwith session close` |
+

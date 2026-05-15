@@ -9,6 +9,7 @@ import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.Config;
+import com.czqwq.talkwith.ai.SessionPersistence;
 import com.czqwq.talkwith.ai.SharedSession;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -194,12 +195,14 @@ public class PacketSessionControl implements IMessage {
                         if (newOwnerUuid != null) {
                             session.ownerUuid = newOwnerUuid;
                             session.ownerName = newOwnerName;
+                            SessionPersistence.save(session);
                             EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
                             if (newOwnerPlayer != null) {
                                 newOwnerPlayer.addChatMessage(ok("talkwith.session.owner_transferred"));
                             }
                         } else {
                             SharedSession.sessions.remove(session.sessionId);
+                            // History intentionally preserved on disk for potential future restore
                         }
                     } else {
                         // Non-owner leaving
@@ -215,6 +218,7 @@ public class PacketSessionControl implements IMessage {
                             return null;
                         }
                         SharedSession.sessions.remove(session.sessionId);
+                        SessionPersistence.delete(session.sessionId);
                         for (UUID uuid : session.players) {
                             EntityPlayerMP member = getPlayerByUUID(server, uuid);
                             if (member != null) {
@@ -306,6 +310,7 @@ public class PacketSessionControl implements IMessage {
                         return null;
                     }
                     SharedSession.sessions.remove(session.sessionId);
+                    SessionPersistence.delete(session.sessionId);
                     for (UUID uuid : session.players) {
                         EntityPlayerMP member = getPlayerByUUID(server, uuid);
                         if (member != null) {
@@ -314,6 +319,16 @@ public class PacketSessionControl implements IMessage {
                         }
                     }
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
+                }
+                case "history_clear" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    session.session.clear();
+                    session.recentMessages.clear();
+                    SessionPersistence.delete(session.sessionId);
+                    player.addChatMessage(ok("talkwith.session.history_cleared"));
                 }
                 default -> player.addChatMessage(errf("talkwith.unknown_sub", msg.action));
             }

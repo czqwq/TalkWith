@@ -32,4 +32,15 @@ public class ChatSession {
     public synchronized int size() {
         return history.size();
     }
+
+    /** Returns a snapshot of the full history for persistence. */
+    public synchronized List<ChatMessage> getHistory() {
+        return new ArrayList<>(history);
+    }
+
+    /** Replaces the history (used when restoring a persisted session). */
+    public synchronized void loadHistory(List<ChatMessage> messages) {
+        history.clear();
+        history.addAll(messages);
+    }
 }

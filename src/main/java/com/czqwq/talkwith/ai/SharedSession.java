@@ -46,6 +46,22 @@ public class SharedSession {
         players.add(ownerUuid);
     }
 
+    /**
+     * Restore constructor — used by {@link SessionPersistence} when loading sessions from disk.
+     * The {@code players} set is intentionally left empty; members must rejoin after a restart.
+     */
+    public SharedSession(String sessionId, UUID ownerUuid, String ownerName, String baseUrl, String apiKey,
+        String model, int cooldown) {
+        this.sessionId = sessionId;
+        this.ownerUuid = ownerUuid;
+        this.ownerName = ownerName;
+        this.ownerBaseUrl = baseUrl;
+        this.ownerApiKey = apiKey;
+        this.sessionModel = model != null ? model : "";
+        this.cooldown = cooldown;
+        // players intentionally empty — members must rejoin after server restart
+    }
+
     /** Record a completed exchange for history sync. */
     public void addRecentMessage(String playerName, String playerMsg, String aiReply) {
         recentMessages.add(new String[] { playerName, playerMsg, aiReply });

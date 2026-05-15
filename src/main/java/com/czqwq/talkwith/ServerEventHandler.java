@@ -9,11 +9,11 @@ import net.minecraft.util.ChatComponentTranslation;
 import net.minecraftforge.event.ServerChatEvent;
 
 import com.czqwq.talkwith.ai.AIClient;
+import com.czqwq.talkwith.ai.SessionPersistence;
 import com.czqwq.talkwith.ai.SharedSession;
 import com.czqwq.talkwith.network.PacketClientAIRequest;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketHandshake;
-import com.czqwq.talkwith.network.PacketOpenGui;
 import com.czqwq.talkwith.network.PacketSessionBroadcast;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -53,18 +53,20 @@ public class ServerEventHandler {
                 }
 
                 if (newOwnerUuid != null) {
-                    // Transfer ownership
+                    // Transfer ownership — save updated owner to disk
                     session.ownerUuid = newOwnerUuid;
                     session.ownerName = newOwnerName;
                     session.players.remove(playerUuid);
+                    SessionPersistence.save(session);
                     EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
                     if (newOwnerPlayer != null) {
                         newOwnerPlayer.addChatMessage(
-                            new ChatComponentText("§a[TalkWith]§r ").appendSibling(
-                                new ChatComponentTranslation("talkwith.session.owner_transferred")));
+                            new ChatComponentText("§a[TalkWith]§r ")
+                                .appendSibling(new ChatComponentTranslation("talkwith.session.owner_transferred")));
                     }
                 } else {
-                    // No remaining online members — close session silently
+                    // No remaining online members — persist history then remove from memory
+                    // (file stays on disk so history survives restart)
                     SharedSession.sessions.remove(session.sessionId);
                 }
             } else {
@@ -102,8 +104,8 @@ public class ServerEventHandler {
             // Enforce mute
             if (session.isMuted(playerUuid)) {
                 player.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r ").appendSibling(
-                        new ChatComponentTranslation("talkwith.session.muted")));
+                    new ChatComponentText("§c[TalkWith]§r ")
+                        .appendSibling(new ChatComponentTranslation("talkwith.session.muted")));
                 return;
             }
 
@@ -112,8 +114,8 @@ public class ServerEventHandler {
                 long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
                     / 1000 + 1;
                 player.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r ").appendSibling(
-                        new ChatComponentTranslation("talkwith.session.cooldown", remaining)));
+                    new ChatComponentText("§c[TalkWith]§r ")
+                        .appendSibling(new ChatComponentTranslation("talkwith.session.cooldown", remaining)));
                 return;
             }
 
@@ -128,6 +130,7 @@ public class ServerEventHandler {
                     session.session.addMessage("assistant", reply);
                     session.lastReplyTime = System.currentTimeMillis();
                     session.addRecentMessage(playerName, text, reply);
+                    SessionPersistence.save(session);
                     broadcastToSession(session, playerName, text, reply, server);
                 },
                 err -> broadcastErrorToSession(session, err, server));
