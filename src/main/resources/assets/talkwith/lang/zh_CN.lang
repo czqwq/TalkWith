@@ -1,0 +1,13 @@
+talkwith.command.usage=用法: /talkwith <baseurl|keyset|model|system_prompt|reload|history|join|single>
+talkwith.config.saved=配置已保存。
+talkwith.config.reloaded=配置已重载。
+talkwith.api.pinging=正在测试 API 连接...
+talkwith.history.cleared=聊天历史已清空。
+talkwith.history.show=历史记录: %s 条消息。
+talkwith.session.joined=已加入会话 %s。
+talkwith.session.already_in=你已经在一个会话中了。
+talkwith.session.not_in=你当前没有在任何会话中。
+talkwith.session.left=已退出共享会话，切换回单人模式。
+talkwith.session.closed=会话已关闭。
+talkwith.session.cooldown=AI 正在冷却中，请等待 %s 秒。
+talkwith.session.muted=你在该会话中已被禁言。

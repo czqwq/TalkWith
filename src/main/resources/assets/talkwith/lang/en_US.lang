@@ -1,0 +1,13 @@
+talkwith.command.usage=Usage: /talkwith <baseurl|keyset|model|system_prompt|reload|history|join|single>
+talkwith.config.saved=Configuration saved.
+talkwith.config.reloaded=Configuration reloaded.
+talkwith.api.pinging=Pinging API...
+talkwith.history.cleared=Chat history cleared.
+talkwith.history.show=History: %s messages.
+talkwith.session.joined=Joined session %s.
+talkwith.session.already_in=You are already in a session.
+talkwith.session.not_in=You are not in any session.
+talkwith.session.left=Left shared session. Back to single mode.
+talkwith.session.closed=Session closed.
+talkwith.session.cooldown=AI is on cooldown. Please wait %s seconds.
+talkwith.session.muted=You are muted in this session.
