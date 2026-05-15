@@ -96,6 +96,19 @@ public class TalkWithCommand extends CommandBase {
                 Config.load();
                 TextUtils.info(StatCollector.translateToLocal("talkwith.config.reloaded"));
             }
+            case "status" -> {
+                if (ClientProxy.currentSessionId != null) {
+                    TextUtils.info(
+                        StatCollector
+                            .translateToLocalFormatted("talkwith.status.session", ClientProxy.currentSessionId));
+                } else {
+                    TextUtils.info(
+                        StatCollector.translateToLocalFormatted(
+                            "talkwith.status.client",
+                            Config.baseUrl,
+                            Config.model));
+                }
+            }
             case "history" -> {
                 if (args.length < 2) {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.history.usage"));
@@ -133,7 +146,7 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.session.join_usage"));
                     return;
                 }
-                ClientProxy.currentSessionId = args[1];
+                // Do NOT pre-set currentSessionId here; the server sends PacketOpenGui on success
                 PacketHandler.INSTANCE.sendToServer(new PacketJoinSession(args[1]));
             }
             case "single" -> {
@@ -141,7 +154,7 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
-                ClientProxy.currentSessionId = null;
+                // Do NOT pre-set currentSessionId; server sends PacketOpenGui("") on success
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("single", ""));
             }
             case "share" -> {
@@ -252,7 +265,7 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.session.join_usage"));
                     return;
                 }
-                ClientProxy.currentSessionId = args[2];
+                // Do NOT pre-set currentSessionId; server sends PacketOpenGui on success
                 PacketHandler.INSTANCE.sendToServer(new PacketJoinSession(args[2]));
             }
             case "list" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("list", ""));

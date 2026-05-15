@@ -111,7 +111,10 @@ public class Config {
             }
         }
 
-        return "You are a helpful assistant in Minecraft.";
+        // Neither file exists: write the default so the user can edit it
+        String defaultPrompt = "You are a helpful assistant in Minecraft.";
+        saveSystemPrompt(defaultPrompt);
+        return defaultPrompt;
     }
 
     private static void saveSystemPrompt(String prompt) {

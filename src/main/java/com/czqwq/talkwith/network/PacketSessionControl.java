@@ -91,6 +91,11 @@ public class PacketSessionControl implements IMessage {
             }
 
             if ("server_create".equals(msg.action)) {
+                // Reject if player is already in any session
+                if (getPlayerSession(playerUuid) != null) {
+                    player.addChatMessage(err("talkwith.session.already_in"));
+                    return null;
+                }
                 SharedSession newSession = new SharedSession(playerUuid, playerName, "", "", "");
                 SharedSession.sessions.put(newSession.sessionId, newSession);
                 player.addChatMessage(okf("talkwith.session.created", newSession.sessionId));
@@ -99,9 +104,24 @@ public class PacketSessionControl implements IMessage {
             }
 
             if ("client_create".equals(msg.action)) {
+                // Close any session the player owns
                 SharedSession owned = getOwnedSession(playerUuid);
                 if (owned != null) {
                     SharedSession.sessions.remove(owned.sessionId);
+                    for (UUID uuid : owned.players) {
+                        if (!uuid.equals(playerUuid)) {
+                            EntityPlayerMP member = getPlayerByUUID(server, uuid);
+                            if (member != null) {
+                                member.addChatMessage(err("talkwith.session.closed"));
+                                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
+                            }
+                        }
+                    }
+                }
+                // Also leave any session the player joined as a non-owner member
+                SharedSession joined = getPlayerSession(playerUuid);
+                if (joined != null) {
+                    joined.players.remove(playerUuid);
                 }
                 PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 player.addChatMessage(ok("talkwith.session.delete_ok"));
@@ -153,6 +173,40 @@ public class PacketSessionControl implements IMessage {
                         SharedSession.sessions.remove(session.sessionId);
                     }
                     player.addChatMessage(ok("talkwith.session.left"));
+                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
+                }
+                case "leave" -> {
+                    if (session.ownerUuid.equals(playerUuid)) {
+                        // Owner leaving: transfer to next member or close
+                        UUID newOwnerUuid = null;
+                        String newOwnerName = null;
+                        for (UUID uuid : session.players) {
+                            if (!uuid.equals(playerUuid)) {
+                                EntityPlayerMP candidate = getPlayerByUUID(server, uuid);
+                                if (candidate != null) {
+                                    newOwnerUuid = uuid;
+                                    newOwnerName = candidate.getCommandSenderName();
+                                    break;
+                                }
+                            }
+                        }
+                        session.players.remove(playerUuid);
+                        if (newOwnerUuid != null) {
+                            session.ownerUuid = newOwnerUuid;
+                            session.ownerName = newOwnerName;
+                            EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
+                            if (newOwnerPlayer != null) {
+                                newOwnerPlayer.addChatMessage(ok("talkwith.session.owner_transferred"));
+                            }
+                        } else {
+                            SharedSession.sessions.remove(session.sessionId);
+                        }
+                    } else {
+                        // Non-owner leaving
+                        session.players.remove(playerUuid);
+                    }
+                    player.addChatMessage(ok("talkwith.session.left"));
+                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 }
                 case "delete" -> {
                     if (session != null) {
@@ -169,6 +223,7 @@ public class PacketSessionControl implements IMessage {
                             }
                         }
                     }
+                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                     player.addChatMessage(ok("talkwith.session.delete_ok"));
                 }
                 case "setting_model" -> {
@@ -258,6 +313,7 @@ public class PacketSessionControl implements IMessage {
                             PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
                         }
                     }
+                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 }
                 default -> player.addChatMessage(errf("talkwith.unknown_sub", msg.action));
             }

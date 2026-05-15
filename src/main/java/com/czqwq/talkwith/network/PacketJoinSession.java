@@ -6,6 +6,7 @@ import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.ai.SharedSession;
+import com.czqwq.talkwith.network.PacketSessionBroadcast;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -58,6 +59,10 @@ public class PacketJoinSession implements IMessage {
             session.players.add(player.getUniqueID());
             player.addChatMessage(okf("talkwith.session.joined", msg.sessionId));
             PacketHandler.INSTANCE.sendTo(new PacketOpenGui(msg.sessionId), player);
+            // Send recent history so the joining player has context
+            for (String[] entry : session.recentMessages) {
+                PacketHandler.INSTANCE.sendTo(new PacketSessionBroadcast(entry[0], entry[1], entry[2]), player);
+            }
             return null;
         }
     }

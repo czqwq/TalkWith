@@ -1,18 +1,24 @@
 package com.czqwq.talkwith.ai;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 public class SharedSession {
 
     public static final Map<String, SharedSession> sessions = new ConcurrentHashMap<>();
 
+    /** Maximum number of recent exchanges kept for history sync on join. */
+    private static final int MAX_RECENT = 5;
+
     public final String sessionId;
-    public final UUID ownerUuid;
-    public final String ownerName;
+    /** Mutable — can be updated when ownership is transferred. */
+    public volatile UUID ownerUuid;
+    public volatile String ownerName;
     public volatile long lastReplyTime = 0;
     public final Set<UUID> players = new CopyOnWriteArraySet<>();
     public final Set<UUID> mutedPlayers = new CopyOnWriteArraySet<>();
@@ -21,6 +27,12 @@ public class SharedSession {
     public volatile String ownerBaseUrl;
     public volatile String ownerApiKey;
     public volatile String sessionModel;
+
+    /**
+     * Ring-buffer of recent [playerName, playerMsg, aiReply] triples.
+     * Sent to players who join mid-session so they see recent context.
+     */
+    public final List<String[]> recentMessages = new CopyOnWriteArrayList<>();
 
     public SharedSession(UUID ownerUuid, String ownerName, String baseUrl, String apiKey, String model) {
         this.sessionId = UUID.randomUUID()
@@ -32,6 +44,14 @@ public class SharedSession {
         this.sessionModel = model != null ? model : "";
         this.cooldown = com.czqwq.talkwith.Config.replyCooldown;
         players.add(ownerUuid);
+    }
+
+    /** Record a completed exchange for history sync. */
+    public void addRecentMessage(String playerName, String playerMsg, String aiReply) {
+        recentMessages.add(new String[] { playerName, playerMsg, aiReply });
+        while (recentMessages.size() > MAX_RECENT) {
+            recentMessages.remove(0);
+        }
     }
 
     public boolean isCooldownActive() {
