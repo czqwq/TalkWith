@@ -1,12 +1,13 @@
 package com.czqwq.talkwith.ai;
 
-import java.util.UUID;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 public class SharedSession {
+
     public static final Map<String, SharedSession> sessions = new ConcurrentHashMap<>();
 
     public final String sessionId;
@@ -21,7 +22,8 @@ public class SharedSession {
     public volatile String ownerApiKey;
 
     public SharedSession(UUID ownerUuid, String ownerName, String baseUrl, String apiKey) {
-        this.sessionId = UUID.randomUUID().toString();
+        this.sessionId = UUID.randomUUID()
+            .toString();
         this.ownerUuid = ownerUuid;
         this.ownerName = ownerName;
         this.ownerBaseUrl = baseUrl;

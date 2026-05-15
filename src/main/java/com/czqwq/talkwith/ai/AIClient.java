@@ -1,10 +1,5 @@
 package com.czqwq.talkwith.ai;
 
-import com.czqwq.talkwith.Config;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -14,7 +9,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
+import com.czqwq.talkwith.Config;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+
 public class AIClient {
+
     private static final ExecutorService executor = Executors.newCachedThreadPool();
     private static final Gson GSON = new Gson();
 
@@ -22,8 +23,8 @@ public class AIClient {
         sendAsync(messages, Config.baseUrl, Config.apiKey, onSuccess, onError);
     }
 
-    public static void sendAsync(List<ChatMessage> messages, String baseUrl, String apiKey,
-                                  Consumer<String> onSuccess, Consumer<String> onError) {
+    public static void sendAsync(List<ChatMessage> messages, String baseUrl, String apiKey, Consumer<String> onSuccess,
+        Consumer<String> onError) {
         executor.submit(() -> {
             try {
                 URL url = new URL(baseUrl + "/v1/chat/completions");
@@ -46,7 +47,8 @@ public class AIClient {
                 }
                 body.add("messages", msgArray);
 
-                byte[] bodyBytes = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);
+                byte[] bodyBytes = GSON.toJson(body)
+                    .getBytes(StandardCharsets.UTF_8);
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(bodyBytes);
                 }
@@ -54,23 +56,35 @@ public class AIClient {
                 int status = conn.getResponseCode();
                 String responseText;
                 if (status >= 200 && status < 300) {
-                    responseText = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                    responseText = new String(readStream(conn.getInputStream()), StandardCharsets.UTF_8);
                 } else {
-                    responseText = new String(conn.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+                    responseText = new String(readStream(conn.getErrorStream()), StandardCharsets.UTF_8);
                     onError.accept("HTTP " + status + ": " + responseText);
                     return;
                 }
 
                 JsonObject responseJson = GSON.fromJson(responseText, JsonObject.class);
-                String content = responseJson
-                        .getAsJsonArray("choices")
-                        .get(0).getAsJsonObject()
-                        .getAsJsonObject("message")
-                        .get("content").getAsString();
+                String content = responseJson.getAsJsonArray("choices")
+                    .get(0)
+                    .getAsJsonObject()
+                    .getAsJsonObject("message")
+                    .get("content")
+                    .getAsString();
                 onSuccess.accept(content);
             } catch (Exception e) {
-                onError.accept(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+                onError.accept(
+                    e.getMessage() != null ? e.getMessage()
+                        : e.getClass()
+                            .getSimpleName());
             }
         });
+    }
+
+    private static byte[] readStream(java.io.InputStream is) throws java.io.IOException {
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        byte[] tmp = new byte[8192];
+        int n;
+        while ((n = is.read(tmp)) != -1) buf.write(tmp, 0, n);
+        return buf.toByteArray();
     }
 }

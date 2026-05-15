@@ -1,16 +1,11 @@
 package com.czqwq.talkwith.network;
 
-import com.czqwq.talkwith.network.PacketHandshake;
-import com.czqwq.talkwith.network.PacketJoinSession;
-import com.czqwq.talkwith.network.PacketSessionBroadcast;
-import com.czqwq.talkwith.network.PacketSessionControl;
-import com.czqwq.talkwith.network.PacketSessionMessage;
-import com.czqwq.talkwith.network.PacketShareInvite;
 import cpw.mods.fml.common.network.NetworkRegistry;
 import cpw.mods.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import cpw.mods.fml.relauncher.Side;
 
 public class PacketHandler {
+
     public static final String CHANNEL = "talkwith";
     public static SimpleNetworkWrapper INSTANCE;
     private static int id = 0;

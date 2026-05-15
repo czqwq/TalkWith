@@ -2,6 +2,7 @@ package com.czqwq.talkwith.network;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.util.TextUtils;
+
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
 import cpw.mods.fml.common.network.simpleimpl.MessageContext;
@@ -16,11 +17,12 @@ public class PacketHandshake implements IMessage {
     public void toBytes(ByteBuf buf) {}
 
     public static class Handler implements IMessageHandler<PacketHandshake, IMessage> {
+
         @Override
         public IMessage onMessage(PacketHandshake msg, MessageContext ctx) {
             ClientProxy.serverHasMod = true;
-            ClientProxy.scheduleOnMainThread(() ->
-                TextUtils.info("Server has TalkWith! Use /talkwith share <player> to start a shared session."));
+            ClientProxy.scheduleOnMainThread(
+                () -> TextUtils.info("Server has TalkWith! Use /talkwith share <player> to start a shared session."));
             return null;
         }
     }

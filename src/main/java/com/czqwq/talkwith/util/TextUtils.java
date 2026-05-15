@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.util.ChatComponentText;
 
 public class TextUtils {
+
     public static final String PREFIX = "§a[TalkWith]§r ";
     public static final String PREFIX_ERROR = "§c[TalkWith]§r ";
 

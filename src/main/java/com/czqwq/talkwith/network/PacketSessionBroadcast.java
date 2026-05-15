@@ -2,6 +2,7 @@ package com.czqwq.talkwith.network;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.util.TextUtils;
+
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
@@ -37,6 +38,7 @@ public class PacketSessionBroadcast implements IMessage {
     }
 
     public static class Handler implements IMessageHandler<PacketSessionBroadcast, IMessage> {
+
         @Override
         public IMessage onMessage(PacketSessionBroadcast msg, MessageContext ctx) {
             ClientProxy.scheduleOnMainThread(() -> {

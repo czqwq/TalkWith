@@ -1,21 +1,19 @@
 package com.czqwq.talkwith;
 
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraftforge.common.MinecraftForge;
+
 import com.czqwq.talkwith.ai.ChatSession;
 import com.czqwq.talkwith.command.TalkWithCommand;
-import com.czqwq.talkwith.gui.GuiAIChat;
-import com.czqwq.talkwith.network.PacketHandler;
-import cpw.mods.fml.client.ClientCommandHandler;
+
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.common.network.FMLNetworkEvent;
-import net.minecraft.client.Minecraft;
-import net.minecraftforge.client.event.ClientChatEvent;
-import net.minecraftforge.common.MinecraftForge;
-
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ClientProxy extends CommonProxy {
 
@@ -39,7 +37,9 @@ public class ClientProxy extends CommonProxy {
         super.init(event);
         ClientCommandHandler.instance.registerCommand(new TalkWithCommand());
         MinecraftForge.EVENT_BUS.register(this);
-        FMLCommonHandler.instance().bus().register(this);
+        FMLCommonHandler.instance()
+            .bus()
+            .register(this);
     }
 
     @SubscribeEvent
@@ -55,15 +55,9 @@ public class ClientProxy extends CommonProxy {
         }
     }
 
-    @SubscribeEvent
-    public void onClientChat(ClientChatEvent event) {
-        String msg = event.message;
-        if (msg.startsWith("> ") || msg.equals(">")) {
-            event.setCanceled(true);
-            String text = msg.length() > 2 ? msg.substring(2) : "";
-            Minecraft.getMinecraft().displayGuiScreen(new GuiAIChat(text));
-        }
-    }
+    // Note: ClientChatEvent does not exist in this GTNH Forge build.
+    // The ">" prefix chat shortcut is therefore not available client-side;
+    // users should use /talkwith or the server-side ServerChatEvent hook instead.
 
     @SubscribeEvent
     public void onClientConnect(FMLNetworkEvent.ClientConnectedToServerEvent event) {

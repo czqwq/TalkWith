@@ -1,18 +1,20 @@
 package com.czqwq.talkwith.network;
 
+import java.util.UUID;
+
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.ChatComponentText;
+
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.AIClient;
 import com.czqwq.talkwith.ai.SharedSession;
+
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
 import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.ChatComponentText;
-
-import java.util.UUID;
 
 public class PacketSessionMessage implements IMessage {
 
@@ -39,6 +41,7 @@ public class PacketSessionMessage implements IMessage {
     }
 
     public static class Handler implements IMessageHandler<PacketSessionMessage, IMessage> {
+
         @Override
         public IMessage onMessage(PacketSessionMessage msg, MessageContext ctx) {
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
@@ -59,8 +62,10 @@ public class PacketSessionMessage implements IMessage {
                 return null;
             }
             if (session.isCooldownActive()) {
-                long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime)) / 1000 + 1;
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r AI is on cooldown. Please wait " + remaining + " seconds."));
+                long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
+                    / 1000 + 1;
+                player.addChatMessage(
+                    new ChatComponentText("§c[TalkWith]§r AI is on cooldown. Please wait " + remaining + " seconds."));
                 return null;
             }
 
@@ -76,15 +81,15 @@ public class PacketSessionMessage implements IMessage {
                     session.lastReplyTime = System.currentTimeMillis();
                     broadcastToSession(session, playerName, msg.message, reply, server);
                 },
-                err -> broadcastErrorToSession(session, err, server)
-            );
+                err -> broadcastErrorToSession(session, err, server));
             return null;
         }
 
-        private void broadcastToSession(SharedSession session, String playerName, String playerMsg, String reply, MinecraftServer server) {
+        private void broadcastToSession(SharedSession session, String playerName, String playerMsg, String reply,
+            MinecraftServer server) {
             PacketSessionBroadcast packet = new PacketSessionBroadcast(playerName, playerMsg, reply);
             for (UUID uuid : session.players) {
-                EntityPlayerMP member = server.getConfigurationManager().getPlayerByUUID(uuid);
+                EntityPlayerMP member = getPlayerByUUID(server, uuid);
                 if (member != null) {
                     PacketHandler.INSTANCE.sendTo(packet, member);
                 }
@@ -93,11 +98,21 @@ public class PacketSessionMessage implements IMessage {
 
         private void broadcastErrorToSession(SharedSession session, String err, MinecraftServer server) {
             for (UUID uuid : session.players) {
-                EntityPlayerMP member = server.getConfigurationManager().getPlayerByUUID(uuid);
+                EntityPlayerMP member = getPlayerByUUID(server, uuid);
                 if (member != null) {
                     member.addChatMessage(new ChatComponentText("§c[TalkWith]§r AI error: " + err));
                 }
             }
+        }
+
+        @SuppressWarnings("unchecked")
+        private static EntityPlayerMP getPlayerByUUID(MinecraftServer server, UUID uuid) {
+            for (Object obj : server.getConfigurationManager().playerEntityList) {
+                EntityPlayerMP p = (EntityPlayerMP) obj;
+                if (p.getUniqueID()
+                    .equals(uuid)) return p;
+            }
+            return null;
         }
     }
 }

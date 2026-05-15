@@ -1,11 +1,12 @@
 package com.czqwq.talkwith.ai;
 
-import com.czqwq.talkwith.Config;
-
 import java.util.ArrayList;
 import java.util.List;
 
+import com.czqwq.talkwith.Config;
+
 public class ChatSession {
+
     private final List<ChatMessage> history = new ArrayList<>();
 
     public synchronized void addMessage(String role, String content) {

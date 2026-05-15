@@ -1,17 +1,16 @@
 package com.czqwq.talkwith.gui;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiTextField;
+
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.AIClient;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketSessionMessage;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
-import net.minecraft.util.ChatComponentText;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class GuiAIChat extends GuiScreen {
 
@@ -59,7 +58,10 @@ public class GuiAIChat extends GuiScreen {
         }
 
         if (isThinking) {
-            String dots = ".".repeat((thinkingTick / 10) % 4);
+            StringBuilder dotBuilder = new StringBuilder();
+            int dotCount = (thinkingTick / 10) % 4;
+            for (int d = 0; d < dotCount; d++) dotBuilder.append('.');
+            String dots = dotBuilder.toString();
             fontRendererObj.drawStringWithShadow("§7AI is thinking" + dots, 4, startY > 0 ? startY : 4, 0xFFFFFF);
         }
 
@@ -67,19 +69,14 @@ public class GuiAIChat extends GuiScreen {
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
+    @SuppressWarnings("unchecked")
     private List<String> wrapLine(String text, int maxWidth) {
-        List<String> result = new ArrayList<>();
         if (fontRendererObj.getStringWidth(text) <= maxWidth) {
-            result.add(text);
-            return result;
+            List<String> single = new java.util.ArrayList<>();
+            single.add(text);
+            return single;
         }
-        String remaining = text;
-        while (!remaining.isEmpty()) {
-            int cutPoint = fontRendererObj.sizeStringToWidth(remaining, maxWidth);
-            result.add(remaining.substring(0, cutPoint));
-            remaining = remaining.substring(cutPoint);
-        }
-        return result;
+        return fontRendererObj.listFormattedStringToWidth(text, maxWidth);
     }
 
     @Override
@@ -100,7 +97,8 @@ public class GuiAIChat extends GuiScreen {
     }
 
     private void sendMessage() {
-        String text = inputField.getText().trim();
+        String text = inputField.getText()
+            .trim();
         if (text.isEmpty()) return;
 
         lines.add("§eYou: §f" + text);
@@ -122,8 +120,7 @@ public class GuiAIChat extends GuiScreen {
                 err -> ClientProxy.scheduleOnMainThread(() -> {
                     lines.add("§c[Error]§r " + err);
                     isThinking = false;
-                })
-            );
+                }));
         }
     }
 
