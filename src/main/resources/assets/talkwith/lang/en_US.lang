@@ -58,3 +58,4 @@ talkwith.command.session_usage=Usage: /talkwith session <server|client|delete|jo
 talkwith.keyset.usage=Usage: /talkwith keyset <key>
 talkwith.system_prompt.usage=Usage: /talkwith system_prompt <text...>
 talkwith.history.usage=Usage: /talkwith history <clear|show>
+talkwith.session.server.setting.usage=Usage: /talkwith session server setting <model|baseurl|apikey> <value>

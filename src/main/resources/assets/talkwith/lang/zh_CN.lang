@@ -58,3 +58,4 @@ talkwith.command.session_usage=用法：/talkwith session <server|client|delete|
 talkwith.keyset.usage=用法：/talkwith keyset <密钥>
 talkwith.system_prompt.usage=用法：/talkwith system_prompt <提示词...>
 talkwith.history.usage=用法：/talkwith history <clear|show>
+talkwith.session.server.setting.usage=用法：/talkwith session server setting <model|baseurl|apikey> <值>

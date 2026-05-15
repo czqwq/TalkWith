@@ -222,7 +222,7 @@ public class TalkWithCommand extends CommandBase {
                     case "create" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("server_create", ""));
                     case "setting" -> {
                         if (args.length < 5) {
-                            TextUtils.error("Usage: /talkwith session server setting <model|baseurl|apikey> <value>");
+                            TextUtils.error(StatCollector.translateToLocal("talkwith.session.server.setting.usage"));
                             return;
                         }
                         switch (args[3].toLowerCase()) {

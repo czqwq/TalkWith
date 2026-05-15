@@ -99,7 +99,7 @@ public class Config {
             }
         }
 
-        // Backward compat: migrate old .txt file
+        // Backward compat: migrate old .txt file (old file is preserved intentionally)
         File txtFile = new File(systemPromptFile.getParentFile(), "system_prompt.txt");
         if (txtFile.exists()) {
             try {
