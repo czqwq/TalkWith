@@ -5,6 +5,8 @@ import java.util.UUID;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.AIClient;
@@ -40,6 +42,14 @@ public class PacketSessionMessage implements IMessage {
         ByteBufUtils.writeUTF8String(buf, message);
     }
 
+    private static IChatComponent err(String key) {
+        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key));
+    }
+
+    private static IChatComponent errf(String key, Object... args) {
+        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key, args));
+    }
+
     public static class Handler implements IMessageHandler<PacketSessionMessage, IMessage> {
 
         @Override
@@ -50,22 +60,21 @@ public class PacketSessionMessage implements IMessage {
 
             SharedSession session = SharedSession.sessions.get(msg.sessionId);
             if (session == null) {
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r Session not found."));
+                player.addChatMessage(err("talkwith.session.not_found"));
                 return null;
             }
             if (!session.hasPlayer(playerUuid)) {
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r You are not in this session."));
+                player.addChatMessage(err("talkwith.session.not_in_session"));
                 return null;
             }
             if (session.isMuted(playerUuid)) {
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r You are muted in this session."));
+                player.addChatMessage(err("talkwith.session.muted"));
                 return null;
             }
             if (session.isCooldownActive()) {
                 long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
                     / 1000 + 1;
-                player.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r AI is on cooldown. Please wait " + remaining + " seconds."));
+                player.addChatMessage(errf("talkwith.session.cooldown", remaining));
                 return null;
             }
 
@@ -76,12 +85,13 @@ public class PacketSessionMessage implements IMessage {
                 session.session.getMessages(Config.systemPrompt),
                 session.ownerBaseUrl,
                 session.ownerApiKey,
+                session.sessionModel,
                 reply -> {
                     session.session.addMessage("assistant", reply);
                     session.lastReplyTime = System.currentTimeMillis();
                     broadcastToSession(session, playerName, msg.message, reply, server);
                 },
-                err -> broadcastErrorToSession(session, err, server));
+                error -> broadcastErrorToSession(session, error, server));
             return null;
         }
 
@@ -96,11 +106,11 @@ public class PacketSessionMessage implements IMessage {
             }
         }
 
-        private void broadcastErrorToSession(SharedSession session, String err, MinecraftServer server) {
+        private void broadcastErrorToSession(SharedSession session, String error, MinecraftServer server) {
             for (UUID uuid : session.players) {
                 EntityPlayerMP member = getPlayerByUUID(server, uuid);
                 if (member != null) {
-                    member.addChatMessage(new ChatComponentText("§c[TalkWith]§r AI error: " + err));
+                    member.addChatMessage(errf("talkwith.session.ai_error", error));
                 }
             }
         }

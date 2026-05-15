@@ -20,14 +20,16 @@ public class SharedSession {
     public volatile int cooldown;
     public volatile String ownerBaseUrl;
     public volatile String ownerApiKey;
+    public volatile String sessionModel;
 
-    public SharedSession(UUID ownerUuid, String ownerName, String baseUrl, String apiKey) {
+    public SharedSession(UUID ownerUuid, String ownerName, String baseUrl, String apiKey, String model) {
         this.sessionId = UUID.randomUUID()
             .toString();
         this.ownerUuid = ownerUuid;
         this.ownerName = ownerName;
         this.ownerBaseUrl = baseUrl;
         this.ownerApiKey = apiKey;
+        this.sessionModel = model != null ? model : "";
         this.cooldown = com.czqwq.talkwith.Config.replyCooldown;
         players.add(ownerUuid);
     }

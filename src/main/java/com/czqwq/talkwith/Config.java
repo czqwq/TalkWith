@@ -10,6 +10,9 @@ import java.io.OutputStreamWriter;
 
 import net.minecraftforge.common.config.Configuration;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
 public class Config {
 
     public static String baseUrl = "https://api.openai.com";
@@ -23,12 +26,12 @@ public class Config {
 
     static File configFile;
     static Configuration config;
-    /** Separate plain-text file for the system prompt (avoids Forge cfg parser issues with Unicode). */
+    /** Separate JSON file for the system prompt (avoids Forge cfg parser issues with Unicode). */
     static File systemPromptFile;
 
     public static void init(File file) {
         configFile = file;
-        systemPromptFile = new File(file.getParentFile(), "system_prompt.txt");
+        systemPromptFile = new File(file.getParentFile(), "system_prompt.json");
         config = new Configuration(file);
         load();
     }
@@ -77,47 +80,72 @@ public class Config {
     }
 
     // ---------------------------------------------------------------------------
-    // system_prompt.txt helpers
+    // system_prompt.json helpers (with backward-compat .txt fallback)
     // ---------------------------------------------------------------------------
 
     private static String loadSystemPrompt() {
-        if (systemPromptFile == null || !systemPromptFile.exists()) {
-            return "You are a helpful assistant in Minecraft.";
-        }
-        try {
-            StringBuilder sb = new StringBuilder();
-            BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new FileInputStream(systemPromptFile), "UTF-8"));
+        if (systemPromptFile == null) return "You are a helpful assistant in Minecraft.";
+
+        // Try JSON file first
+        if (systemPromptFile.exists()) {
             try {
-                String line;
-                boolean first = true;
-                while ((line = reader.readLine()) != null) {
-                    if (!first) sb.append('\n');
-                    sb.append(line);
-                    first = false;
-                }
-            } finally {
-                reader.close();
+                String raw = readFileUtf8(systemPromptFile);
+                JsonObject obj = new Gson().fromJson(raw, JsonObject.class);
+                return obj.get("prompt")
+                    .getAsString();
+            } catch (Exception e) {
+                TalkWith.LOG.error("Failed to read system_prompt.json", e);
+                return "You are a helpful assistant in Minecraft.";
             }
-            return sb.toString();
-        } catch (Exception e) {
-            TalkWith.LOG.error("Failed to read system_prompt.txt", e);
-            return "You are a helpful assistant in Minecraft.";
         }
+
+        // Backward compat: migrate old .txt file
+        File txtFile = new File(systemPromptFile.getParentFile(), "system_prompt.txt");
+        if (txtFile.exists()) {
+            try {
+                String prompt = readFileUtf8(txtFile);
+                saveSystemPrompt(prompt);
+                return prompt;
+            } catch (Exception e) {
+                TalkWith.LOG.error("Failed to read system_prompt.txt for migration", e);
+            }
+        }
+
+        return "You are a helpful assistant in Minecraft.";
     }
 
     private static void saveSystemPrompt(String prompt) {
         if (systemPromptFile == null) return;
         try {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("prompt", prompt);
+            String json = new Gson().toJson(obj);
             BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(new FileOutputStream(systemPromptFile), "UTF-8"));
             try {
-                writer.write(prompt);
+                writer.write(json);
             } finally {
                 writer.close();
             }
         } catch (Exception e) {
-            TalkWith.LOG.error("Failed to write system_prompt.txt", e);
+            TalkWith.LOG.error("Failed to write system_prompt.json", e);
         }
+    }
+
+    private static String readFileUtf8(File file) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
+        try {
+            String line;
+            boolean first = true;
+            while ((line = reader.readLine()) != null) {
+                if (!first) sb.append('\n');
+                sb.append(line);
+                first = false;
+            }
+        } finally {
+            reader.close();
+        }
+        return sb.toString();
     }
 }

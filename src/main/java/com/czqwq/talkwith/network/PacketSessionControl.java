@@ -5,6 +5,8 @@ import java.util.UUID;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.SharedSession;
@@ -39,45 +41,108 @@ public class PacketSessionControl implements IMessage {
         ByteBufUtils.writeUTF8String(buf, target != null ? target : "");
     }
 
+    private static IChatComponent err(String key) {
+        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key));
+    }
+
+    private static IChatComponent ok(String key) {
+        return new ChatComponentText("§a[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key));
+    }
+
+    private static IChatComponent okf(String key, Object... args) {
+        return new ChatComponentText("§a[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key, args));
+    }
+
+    private static IChatComponent errf(String key, Object... args) {
+        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key, args));
+    }
+
     public static class Handler implements IMessageHandler<PacketSessionControl, IMessage> {
 
         @Override
         public IMessage onMessage(PacketSessionControl msg, MessageContext ctx) {
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
             UUID playerUuid = player.getUniqueID();
+            String playerName = player.getCommandSenderName();
             MinecraftServer server = MinecraftServer.getServer();
 
-            // "share" creates a new session and does not require an existing one
-            if ("share".equals(msg.action)) {
-                EntityPlayerMP target = server.getConfigurationManager()
+            // --- Actions that create a session or don't require one ---
+
+            if ("share".equals(msg.action) || "invite".equals(msg.action)) {
+                EntityPlayerMP targetPlayer = server.getConfigurationManager()
                     .func_152612_a(msg.target);
-                if (target == null) {
-                    player.addChatMessage(new ChatComponentText("§c[TalkWith]§r Player not found: " + msg.target));
+                if (targetPlayer == null) {
+                    player.addChatMessage(errf("talkwith.session.player_not_found", msg.target));
                     return null;
                 }
-                SharedSession session = new SharedSession(
-                    playerUuid,
-                    player.getCommandSenderName(),
-                    Config.baseUrl,
-                    Config.apiKey);
-                SharedSession.sessions.put(session.sessionId, session);
-                player.addChatMessage(new ChatComponentText("§a[TalkWith]§r Session created: " + session.sessionId));
-                PacketHandler.INSTANCE
-                    .sendTo(new PacketShareInvite(player.getCommandSenderName(), session.sessionId), target);
+                // Invite to existing owned session, or create a new one
+                SharedSession existing = getOwnedSession(playerUuid);
+                SharedSession session;
+                if (existing != null) {
+                    session = existing;
+                } else {
+                    session = new SharedSession(playerUuid, playerName, Config.baseUrl, Config.apiKey, Config.model);
+                    SharedSession.sessions.put(session.sessionId, session);
+                    player.addChatMessage(okf("talkwith.session.created", session.sessionId));
+                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
+                }
+                PacketHandler.INSTANCE.sendTo(new PacketShareInvite(playerName, session.sessionId), targetPlayer);
                 return null;
             }
 
-            // Find the session this player owns or is in
-            SharedSession session = null;
-            for (SharedSession s : SharedSession.sessions.values()) {
-                if (s.ownerUuid.equals(playerUuid) || s.hasPlayer(playerUuid)) {
-                    session = s;
-                    break;
-                }
+            if ("server_create".equals(msg.action)) {
+                SharedSession newSession = new SharedSession(playerUuid, playerName, "", "", "");
+                SharedSession.sessions.put(newSession.sessionId, newSession);
+                player.addChatMessage(okf("talkwith.session.created", newSession.sessionId));
+                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(newSession.sessionId), player);
+                return null;
             }
 
-            if (session == null) {
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r You are not in any session."));
+            if ("client_create".equals(msg.action)) {
+                SharedSession owned = getOwnedSession(playerUuid);
+                if (owned != null) {
+                    SharedSession.sessions.remove(owned.sessionId);
+                }
+                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
+                player.addChatMessage(ok("talkwith.session.delete_ok"));
+                return null;
+            }
+
+            if ("list".equals(msg.action)) {
+                if (SharedSession.sessions.isEmpty()) {
+                    player.addChatMessage(ok("talkwith.session.list_empty"));
+                } else {
+                    player.addChatMessage(okf("talkwith.session.list_header", SharedSession.sessions.size()));
+                    for (SharedSession s : SharedSession.sessions.values()) {
+                        player.addChatMessage(
+                            okf("talkwith.session.list_entry", s.sessionId, s.ownerName, s.players.size()));
+                    }
+                }
+                return null;
+            }
+
+            if ("info".equals(msg.action)) {
+                SharedSession infoSession = getPlayerSession(playerUuid);
+                if (infoSession == null) {
+                    player.addChatMessage(ok("talkwith.session.info_none"));
+                } else {
+                    player.addChatMessage(
+                        okf(
+                            "talkwith.session.info",
+                            infoSession.sessionId,
+                            infoSession.ownerName,
+                            infoSession.players.size(),
+                            infoSession.sessionModel));
+                }
+                return null;
+            }
+
+            // --- Actions that require an existing session ---
+
+            SharedSession session = getPlayerSession(playerUuid);
+
+            if (session == null && !"delete".equals(msg.action)) {
+                player.addChatMessage(err("talkwith.session.not_found"));
                 return null;
             }
 
@@ -87,79 +152,128 @@ public class PacketSessionControl implements IMessage {
                     if (session.players.isEmpty() || session.ownerUuid.equals(playerUuid)) {
                         SharedSession.sessions.remove(session.sessionId);
                     }
-                    player.addChatMessage(
-                        new ChatComponentText("§a[TalkWith]§r Left shared session. Back to single mode."));
+                    player.addChatMessage(ok("talkwith.session.left"));
+                }
+                case "delete" -> {
+                    if (session != null) {
+                        if (!session.ownerUuid.equals(playerUuid)) {
+                            player.addChatMessage(err("talkwith.session.owner_only"));
+                            return null;
+                        }
+                        SharedSession.sessions.remove(session.sessionId);
+                        for (UUID uuid : session.players) {
+                            EntityPlayerMP member = getPlayerByUUID(server, uuid);
+                            if (member != null) {
+                                member.addChatMessage(err("talkwith.session.closed"));
+                                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
+                            }
+                        }
+                    }
+                    player.addChatMessage(ok("talkwith.session.delete_ok"));
+                }
+                case "setting_model" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    session.sessionModel = msg.target;
+                    player.addChatMessage(okf("talkwith.session.setting_model", msg.target));
+                }
+                case "setting_baseurl" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    session.ownerBaseUrl = msg.target;
+                    player.addChatMessage(okf("talkwith.session.setting_baseurl", msg.target));
+                }
+                case "setting_apikey" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    session.ownerApiKey = msg.target;
+                    player.addChatMessage(ok("talkwith.session.setting_apikey"));
                 }
                 case "mute" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
-                        player.addChatMessage(
-                            new ChatComponentText("§c[TalkWith]§r Only the session owner can do that."));
+                        player.addChatMessage(err("talkwith.session.owner_only"));
                         return null;
                     }
-                    EntityPlayerMP target = server.getConfigurationManager()
+                    EntityPlayerMP targetPlayer = server.getConfigurationManager()
                         .func_152612_a(msg.target);
-                    if (target != null) {
-                        session.mutedPlayers.add(target.getUniqueID());
-                        player.addChatMessage(new ChatComponentText("§a[TalkWith]§r Muted " + msg.target + "."));
+                    if (targetPlayer != null) {
+                        session.mutedPlayers.add(targetPlayer.getUniqueID());
+                        player.addChatMessage(okf("talkwith.session.muted_player", msg.target));
                     }
                 }
                 case "unmute" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
-                        player.addChatMessage(
-                            new ChatComponentText("§c[TalkWith]§r Only the session owner can do that."));
+                        player.addChatMessage(err("talkwith.session.owner_only"));
                         return null;
                     }
-                    EntityPlayerMP target = server.getConfigurationManager()
+                    EntityPlayerMP targetPlayer = server.getConfigurationManager()
                         .func_152612_a(msg.target);
-                    if (target != null) {
-                        session.mutedPlayers.remove(target.getUniqueID());
-                        player.addChatMessage(new ChatComponentText("§a[TalkWith]§r Unmuted " + msg.target + "."));
+                    if (targetPlayer != null) {
+                        session.mutedPlayers.remove(targetPlayer.getUniqueID());
+                        player.addChatMessage(okf("talkwith.session.unmuted_player", msg.target));
                     }
                 }
                 case "kick" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
-                        player.addChatMessage(
-                            new ChatComponentText("§c[TalkWith]§r Only the session owner can do that."));
+                        player.addChatMessage(err("talkwith.session.owner_only"));
                         return null;
                     }
-                    EntityPlayerMP target = server.getConfigurationManager()
+                    EntityPlayerMP targetPlayer = server.getConfigurationManager()
                         .func_152612_a(msg.target);
-                    if (target != null) {
-                        session.players.remove(target.getUniqueID());
-                        target
-                            .addChatMessage(new ChatComponentText("§c[TalkWith]§r You were kicked from the session."));
-                        player.addChatMessage(new ChatComponentText("§a[TalkWith]§r Kicked " + msg.target + "."));
+                    if (targetPlayer != null) {
+                        session.players.remove(targetPlayer.getUniqueID());
+                        targetPlayer.addChatMessage(err("talkwith.session.kicked"));
+                        PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), targetPlayer);
+                        player.addChatMessage(okf("talkwith.session.kicked_player", msg.target));
                     }
                 }
                 case "cooldown" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
-                        player.addChatMessage(
-                            new ChatComponentText("§c[TalkWith]§r Only the session owner can do that."));
+                        player.addChatMessage(err("talkwith.session.owner_only"));
                         return null;
                     }
                     try {
                         session.cooldown = Integer.parseInt(msg.target);
-                        player.addChatMessage(
-                            new ChatComponentText("§a[TalkWith]§r Cooldown set to " + session.cooldown + "s."));
+                        player.addChatMessage(okf("talkwith.session.cooldown_set", session.cooldown));
                     } catch (NumberFormatException e) {
-                        player.addChatMessage(new ChatComponentText("§c[TalkWith]§r Invalid cooldown value."));
+                        player.addChatMessage(err("talkwith.session.invalid_cooldown"));
                     }
                 }
                 case "close" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
-                        player.addChatMessage(
-                            new ChatComponentText("§c[TalkWith]§r Only the session owner can close the session."));
+                        player.addChatMessage(err("talkwith.session.close_owner_only"));
                         return null;
                     }
                     SharedSession.sessions.remove(session.sessionId);
                     for (UUID uuid : session.players) {
                         EntityPlayerMP member = getPlayerByUUID(server, uuid);
                         if (member != null) {
-                            member.addChatMessage(new ChatComponentText("§c[TalkWith]§r Session closed."));
+                            member.addChatMessage(err("talkwith.session.closed"));
+                            PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
                         }
                     }
                 }
-                default -> player.addChatMessage(new ChatComponentText("§c[TalkWith]§r Unknown action: " + msg.action));
+                default -> player.addChatMessage(errf("talkwith.unknown_sub", msg.action));
+            }
+            return null;
+        }
+
+        private static SharedSession getOwnedSession(UUID playerUuid) {
+            for (SharedSession s : SharedSession.sessions.values()) {
+                if (s.ownerUuid.equals(playerUuid)) return s;
+            }
+            return null;
+        }
+
+        private static SharedSession getPlayerSession(UUID playerUuid) {
+            for (SharedSession s : SharedSession.sessions.values()) {
+                if (s.hasPlayer(playerUuid)) return s;
             }
             return null;
         }

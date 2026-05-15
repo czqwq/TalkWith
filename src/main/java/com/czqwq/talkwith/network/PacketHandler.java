@@ -19,5 +19,6 @@ public class PacketHandler {
         INSTANCE.registerMessage(PacketSessionMessage.Handler.class, PacketSessionMessage.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PacketSessionBroadcast.Handler.class, PacketSessionBroadcast.class, id++, Side.CLIENT);
         INSTANCE.registerMessage(PacketSessionControl.Handler.class, PacketSessionControl.class, id++, Side.SERVER);
+        INSTANCE.registerMessage(PacketClientAIRequest.Handler.class, PacketClientAIRequest.class, id++, Side.CLIENT);
     }
 }

@@ -2,6 +2,8 @@ package com.czqwq.talkwith.network;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.ai.SharedSession;
 
@@ -31,6 +33,14 @@ public class PacketJoinSession implements IMessage {
         ByteBufUtils.writeUTF8String(buf, sessionId);
     }
 
+    private static IChatComponent err(String key) {
+        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key));
+    }
+
+    private static IChatComponent okf(String key, Object... args) {
+        return new ChatComponentText("§a[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key, args));
+    }
+
     public static class Handler implements IMessageHandler<PacketJoinSession, IMessage> {
 
         @Override
@@ -38,15 +48,16 @@ public class PacketJoinSession implements IMessage {
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
             SharedSession session = SharedSession.sessions.get(msg.sessionId);
             if (session == null) {
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r Session not found: " + msg.sessionId));
+                player.addChatMessage(err("talkwith.session.not_found"));
                 return null;
             }
             if (session.hasPlayer(player.getUniqueID())) {
-                player.addChatMessage(new ChatComponentText("§c[TalkWith]§r You are already in this session."));
+                player.addChatMessage(err("talkwith.session.already_in_session"));
                 return null;
             }
             session.players.add(player.getUniqueID());
-            player.addChatMessage(new ChatComponentText("§a[TalkWith]§r Joined session " + msg.sessionId + "."));
+            player.addChatMessage(okf("talkwith.session.joined", msg.sessionId));
+            PacketHandler.INSTANCE.sendTo(new PacketOpenGui(msg.sessionId), player);
             return null;
         }
     }

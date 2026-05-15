@@ -3,11 +3,11 @@ package com.czqwq.talkwith.network;
 import net.minecraft.client.Minecraft;
 import net.minecraft.event.ClickEvent;
 import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.ChatStyle;
 import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.ClientProxy;
-import com.czqwq.talkwith.util.TextUtils;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -44,12 +44,13 @@ public class PacketShareInvite implements IMessage {
         @Override
         public IMessage onMessage(PacketShareInvite msg, MessageContext ctx) {
             ClientProxy.scheduleOnMainThread(() -> {
-                IChatComponent base = new ChatComponentText(
-                    TextUtils.PREFIX + msg.senderName + " invited you to an AI session! ");
+                IChatComponent base = new ChatComponentText("§a[TalkWith]§r ")
+                    .appendSibling(new ChatComponentTranslation("talkwith.session.invited", msg.senderName))
+                    .appendText(" ");
                 IChatComponent link = new ChatComponentText("§b[Click to join]");
                 link.setChatStyle(
                     new ChatStyle().setChatClickEvent(
-                        new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/talkwith join " + msg.sessionId)));
+                        new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/talkwith session join " + msg.sessionId)));
                 base.appendSibling(link);
                 Minecraft.getMinecraft().thePlayer.addChatMessage(base);
             });

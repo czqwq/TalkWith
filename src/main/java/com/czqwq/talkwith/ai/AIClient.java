@@ -20,11 +20,16 @@ public class AIClient {
     private static final Gson GSON = new Gson();
 
     public static void sendAsync(List<ChatMessage> messages, Consumer<String> onSuccess, Consumer<String> onError) {
-        sendAsync(messages, Config.baseUrl, Config.apiKey, onSuccess, onError);
+        sendAsync(messages, Config.baseUrl, Config.apiKey, Config.model, onSuccess, onError);
     }
 
     public static void sendAsync(List<ChatMessage> messages, String baseUrl, String apiKey, Consumer<String> onSuccess,
         Consumer<String> onError) {
+        sendAsync(messages, baseUrl, apiKey, Config.model, onSuccess, onError);
+    }
+
+    public static void sendAsync(List<ChatMessage> messages, String baseUrl, String apiKey, String model,
+        Consumer<String> onSuccess, Consumer<String> onError) {
         executor.submit(() -> {
             try {
                 URL url = new URL(baseUrl + "/v1/chat/completions");
@@ -37,7 +42,7 @@ public class AIClient {
                 conn.setDoOutput(true);
 
                 JsonObject body = new JsonObject();
-                body.addProperty("model", Config.model);
+                body.addProperty("model", model);
                 JsonArray msgArray = new JsonArray();
                 for (ChatMessage m : messages) {
                     JsonObject mo = new JsonObject();
