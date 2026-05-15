@@ -6,6 +6,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
 
+import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.SharedSession;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -46,7 +47,27 @@ public class PacketSessionControl implements IMessage {
             UUID playerUuid = player.getUniqueID();
             MinecraftServer server = MinecraftServer.getServer();
 
-            // Find the session this player owns
+            // "share" creates a new session and does not require an existing one
+            if ("share".equals(msg.action)) {
+                EntityPlayerMP target = server.getConfigurationManager()
+                    .func_152612_a(msg.target);
+                if (target == null) {
+                    player.addChatMessage(new ChatComponentText("§c[TalkWith]§r Player not found: " + msg.target));
+                    return null;
+                }
+                SharedSession session = new SharedSession(
+                    playerUuid,
+                    player.getCommandSenderName(),
+                    Config.baseUrl,
+                    Config.apiKey);
+                SharedSession.sessions.put(session.sessionId, session);
+                player.addChatMessage(new ChatComponentText("§a[TalkWith]§r Session created: " + session.sessionId));
+                PacketHandler.INSTANCE
+                    .sendTo(new PacketShareInvite(player.getCommandSenderName(), session.sessionId), target);
+                return null;
+            }
+
+            // Find the session this player owns or is in
             SharedSession session = null;
             for (SharedSession s : SharedSession.sessions.values()) {
                 if (s.ownerUuid.equals(playerUuid) || s.hasPlayer(playerUuid)) {

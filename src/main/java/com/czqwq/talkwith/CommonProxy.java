@@ -4,7 +4,6 @@ import java.io.File;
 
 import net.minecraftforge.common.MinecraftForge;
 
-import com.czqwq.talkwith.command.TalkWithServerCommand;
 import com.czqwq.talkwith.network.PacketHandler;
 
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -30,7 +29,6 @@ public class CommonProxy {
     public void postInit(FMLPostInitializationEvent event) {}
 
     public void serverStarting(FMLServerStartingEvent event) {
-        event.registerServerCommand(new TalkWithServerCommand());
         MinecraftForge.EVENT_BUS.register(new ServerEventHandler());
     }
 }

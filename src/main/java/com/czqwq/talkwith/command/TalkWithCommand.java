@@ -31,14 +31,16 @@ public class TalkWithCommand extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/talkwith <baseurl|keyset|model|system_prompt|reload|history|join|single>";
+        return "/talkwith [baseurl|keyset|model|system_prompt|reload|history|join|single|share|mute|unmute|kick|cooldown|close]";
     }
 
     @Override
     public void processCommand(ICommandSender sender, String[] args) throws CommandException {
         if (args.length == 0) {
-            Minecraft.getMinecraft()
-                .displayGuiScreen(new GuiAIChat(""));
+            // Schedule on next tick so the chat GUI has time to close first
+            ClientProxy.scheduleOnMainThread(
+                () -> Minecraft.getMinecraft()
+                    .displayGuiScreen(new GuiAIChat("")));
             return;
         }
 
@@ -122,6 +124,69 @@ public class TalkWithCommand extends CommandBase {
                 ClientProxy.currentSessionId = null;
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("single", ""));
             }
+            // --- Server session management (requires server to have TalkWith) ---
+            case "share" -> {
+                if (!ClientProxy.serverHasMod) {
+                    TextUtils.error("Server does not have TalkWith installed.");
+                    return;
+                }
+                if (args.length < 2) {
+                    TextUtils.error("Usage: /talkwith share <playerName>");
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("share", args[1]));
+            }
+            case "mute" -> {
+                if (!ClientProxy.serverHasMod) {
+                    TextUtils.error("Server does not have TalkWith installed.");
+                    return;
+                }
+                if (args.length < 2) {
+                    TextUtils.error("Usage: /talkwith mute <playerName>");
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("mute", args[1]));
+            }
+            case "unmute" -> {
+                if (!ClientProxy.serverHasMod) {
+                    TextUtils.error("Server does not have TalkWith installed.");
+                    return;
+                }
+                if (args.length < 2) {
+                    TextUtils.error("Usage: /talkwith unmute <playerName>");
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("unmute", args[1]));
+            }
+            case "kick" -> {
+                if (!ClientProxy.serverHasMod) {
+                    TextUtils.error("Server does not have TalkWith installed.");
+                    return;
+                }
+                if (args.length < 2) {
+                    TextUtils.error("Usage: /talkwith kick <playerName>");
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("kick", args[1]));
+            }
+            case "cooldown" -> {
+                if (!ClientProxy.serverHasMod) {
+                    TextUtils.error("Server does not have TalkWith installed.");
+                    return;
+                }
+                if (args.length < 2) {
+                    TextUtils.error("Usage: /talkwith cooldown <seconds>");
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cooldown", args[1]));
+            }
+            case "close" -> {
+                if (!ClientProxy.serverHasMod) {
+                    TextUtils.error("Server does not have TalkWith installed.");
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("close", ""));
+            }
             default -> TextUtils.error("Unknown sub-command. " + getCommandUsage(sender));
         }
     }
@@ -139,7 +204,13 @@ public class TalkWithCommand extends CommandBase {
                 "reload",
                 "history",
                 "join",
-                "single");
+                "single",
+                "share",
+                "mute",
+                "unmute",
+                "kick",
+                "cooldown",
+                "close");
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("history")) {
             return getListOfStringsMatchingLastWord(args, "clear", "show");

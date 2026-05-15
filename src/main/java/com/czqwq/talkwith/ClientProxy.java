@@ -56,8 +56,8 @@ public class ClientProxy extends CommonProxy {
     }
 
     // Note: ClientChatEvent does not exist in this GTNH Forge build.
-    // The ">" prefix chat shortcut is therefore not available client-side;
-    // users should use /talkwith or the server-side ServerChatEvent hook instead.
+    // The ">" prefix shortcut is handled server-side via ServerChatEvent in ServerEventHandler,
+    // which cancels the message and sends PacketOpenGui to open GuiAIChat on the client.
 
     @SubscribeEvent
     public void onClientConnect(FMLNetworkEvent.ClientConnectedToServerEvent event) {

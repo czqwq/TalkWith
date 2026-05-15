@@ -14,6 +14,7 @@ public class PacketHandler {
         INSTANCE = NetworkRegistry.INSTANCE.newSimpleChannel(CHANNEL);
         INSTANCE.registerMessage(PacketHandshake.Handler.class, PacketHandshake.class, id++, Side.CLIENT);
         INSTANCE.registerMessage(PacketShareInvite.Handler.class, PacketShareInvite.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(PacketOpenGui.Handler.class, PacketOpenGui.class, id++, Side.CLIENT);
         INSTANCE.registerMessage(PacketJoinSession.Handler.class, PacketJoinSession.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PacketSessionMessage.Handler.class, PacketSessionMessage.class, id++, Side.SERVER);
         INSTANCE.registerMessage(PacketSessionBroadcast.Handler.class, PacketSessionBroadcast.class, id++, Side.CLIENT);
