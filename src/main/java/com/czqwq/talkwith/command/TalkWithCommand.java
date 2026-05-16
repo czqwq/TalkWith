@@ -1,6 +1,5 @@
 package com.czqwq.talkwith.command;
 
-import java.util.Arrays;
 import java.util.List;
 
 import net.minecraft.client.Minecraft;
@@ -34,15 +33,14 @@ public class TalkWithCommand extends CommandBase {
         return StatCollector.translateToLocal("talkwith.command.usage");
     }
 
-    /**
-     * Returns true when server-side features are available: either the dedicated server has
-     * the mod installed (signalled by the handshake packet) or we are running on an integrated
-     * server (singleplayer or LAN opened-to-LAN), where the mod is always present.
-     */
     private static boolean serverFeatureAvailable() {
         return ClientProxy.serverHasMod || Minecraft.getMinecraft()
             .isIntegratedServerRunning();
     }
+
+    // -------------------------------------------------------------------------
+    // Main dispatch
+    // -------------------------------------------------------------------------
 
     @Override
     public void processCommand(ICommandSender sender, String[] args) throws CommandException {
@@ -52,59 +50,32 @@ public class TalkWithCommand extends CommandBase {
         }
 
         switch (args[0].toLowerCase()) {
-            case "baseurl" -> {
+            case "config" -> {
                 if (args.length < 2) {
-                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.baseurl.show", Config.baseUrl));
+                    TextUtils.info(StatCollector.translateToLocal("talkwith.config.usage"));
                     return;
                 }
-                Config.baseUrl = args[1];
-                Config.save();
-                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.baseurl.set", Config.baseUrl));
-                TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
-                ApiPinger.ping();
-            }
-            case "keyset" -> {
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.keyset.usage"));
-                    return;
-                }
-                Config.apiKey = args[1];
-                Config.save();
-                TextUtils.info(StatCollector.translateToLocal("talkwith.api.key_updated"));
-                TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
-                ApiPinger.ping();
-            }
-            case "model" -> {
-                if (args.length < 2) {
-                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.model.show", Config.model));
-                    return;
-                }
-                Config.model = args[1];
-                Config.save();
-                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.model.set", Config.model));
-            }
-            case "system_prompt" -> {
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.system_prompt.usage"));
-                    return;
-                }
-                Config.systemPrompt = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
-                Config.save();
-                TextUtils.info(StatCollector.translateToLocal("talkwith.system_prompt.set"));
-            }
-            case "reload" -> {
-                Config.load();
-                TextUtils.info(StatCollector.translateToLocal("talkwith.config.reloaded"));
+                handleConfig(sender, args);
             }
             case "status" -> {
                 if (ClientProxy.currentSessionId != null) {
-                    TextUtils.info(
-                        StatCollector
-                            .translateToLocalFormatted("talkwith.status.session", ClientProxy.currentSessionId));
+                    if (!serverFeatureAvailable()) {
+                        // Fallback if server lost mod somehow
+                        TextUtils.info(
+                            StatCollector.translateToLocalFormatted(
+                                "talkwith.status.session_basic",
+                                ClientProxy.currentSessionId));
+                    } else {
+                        // Query server for live session details
+                        PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("status_info", ""));
+                    }
                 } else {
                     TextUtils.info(
-                        StatCollector
-                            .translateToLocalFormatted("talkwith.status.client", Config.baseUrl, Config.model));
+                        StatCollector.translateToLocalFormatted(
+                            "talkwith.status.client",
+                            Config.baseUrl,
+                            Config.model,
+                            Config.clientPromptFile));
                 }
             }
             case "history" -> {
@@ -134,93 +105,172 @@ public class TalkWithCommand extends CommandBase {
                 }
                 handleSession(sender, args);
             }
-            // --- Legacy aliases for backward compatibility ---
-            case "join" -> {
+            case "switch" -> {
                 if (!serverFeatureAvailable()) {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
                     return;
                 }
                 if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.join_usage"));
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.usage"));
                     return;
                 }
-                // Do NOT pre-set currentSessionId here; the server sends PacketOpenGui on success
-                PacketHandler.INSTANCE.sendToServer(new PacketJoinSession(args[1]));
-            }
-            case "single" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
+                if (ClientProxy.currentSessionId == null) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.not_in_session"));
                     return;
                 }
-                // Do NOT pre-set currentSessionId; server sends PacketOpenGui("") on success
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("single", ""));
-            }
-            case "share" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
+                if (args[1].equalsIgnoreCase("single")) {
+                    ClientProxy.isSingleOverride = true;
+                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("switch_single", ""));
+                } else if (args[1].equalsIgnoreCase("multi")) {
+                    ClientProxy.isSingleOverride = false;
+                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("switch_multi", ""));
+                } else {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.usage"));
                 }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.share_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("share", args[1]));
-            }
-            case "mute" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.mute_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("mute", args[1]));
-            }
-            case "unmute" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.unmute_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("unmute", args[1]));
-            }
-            case "kick" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.kick_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("kick", args[1]));
-            }
-            case "cooldown" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.cooldown_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cooldown", args[1]));
-            }
-            case "close" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("close", ""));
             }
             default -> TextUtils
                 .error(StatCollector.translateToLocalFormatted("talkwith.unknown_sub", getCommandUsage(sender)));
         }
     }
+
+    // -------------------------------------------------------------------------
+    // /talkwith config <client|server|reload> [key] [value]
+    // -------------------------------------------------------------------------
+
+    private void handleConfig(ICommandSender sender, String[] args) {
+        switch (args[1].toLowerCase()) {
+            case "reload" -> {
+                Config.load();
+                TextUtils.info(StatCollector.translateToLocal("talkwith.config.reloaded"));
+            }
+            case "client" -> {
+                if (args.length < 3) {
+                    TextUtils.info(StatCollector.translateToLocal("talkwith.config.client.usage"));
+                    return;
+                }
+                handleClientConfig(args);
+            }
+            case "server" -> {
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
+                    return;
+                }
+                if (args.length < 3) {
+                    TextUtils.info(StatCollector.translateToLocal("talkwith.config.server.usage"));
+                    return;
+                }
+                handleServerConfig(args);
+            }
+            default -> TextUtils.info(StatCollector.translateToLocal("talkwith.config.usage"));
+        }
+    }
+
+    /** Handles {@code /talkwith config client <key> [value]}. All changes are local. */
+    private void handleClientConfig(String[] args) {
+        switch (args[2].toLowerCase()) {
+            case "baseurl" -> {
+                if (args.length < 4) {
+                    TextUtils.info(
+                        StatCollector.translateToLocalFormatted("talkwith.config.client.baseurl.show", Config.baseUrl));
+                    return;
+                }
+                Config.baseUrl = args[3];
+                Config.save();
+                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.baseurl.set", Config.baseUrl));
+                TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
+                ApiPinger.ping();
+            }
+            case "keyset" -> {
+                if (args.length < 4) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.config.client.keyset.usage"));
+                    return;
+                }
+                Config.apiKey = args[3];
+                Config.save();
+                TextUtils.info(StatCollector.translateToLocal("talkwith.api.key_updated"));
+                TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
+                ApiPinger.ping();
+            }
+            case "model" -> {
+                if (args.length < 4) {
+                    TextUtils.info(
+                        StatCollector.translateToLocalFormatted("talkwith.config.client.model.show", Config.model));
+                    return;
+                }
+                Config.model = args[3];
+                Config.save();
+                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.model.set", Config.model));
+            }
+            case "prompt_file" -> {
+                if (args.length < 4) {
+                    TextUtils.info(
+                        StatCollector
+                            .translateToLocalFormatted("talkwith.config.prompt_file.show", Config.clientPromptFile));
+                    return;
+                }
+                String filename = Config.sanitizePromptFilename(args[3]);
+                // Auto-create the file with default content if it doesn't exist
+                Config.systemPrompt = Config.loadPromptFromFile(filename);
+                Config.clientPromptFile = filename;
+                Config.save();
+                TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.config.prompt_file.set", filename));
+            }
+            case "list_prompts" -> {
+                java.util.List<String> files = Config.listPromptFiles();
+                if (files.isEmpty()) {
+                    TextUtils.info(StatCollector.translateToLocal("talkwith.config.prompts_list_empty"));
+                } else {
+                    TextUtils.info(
+                        StatCollector.translateToLocalFormatted("talkwith.config.prompts_list_header", files.size()));
+                    for (String f : files) {
+                        TextUtils.info("  §7- §f" + f);
+                    }
+                }
+            }
+            default -> TextUtils.info(StatCollector.translateToLocal("talkwith.config.client.usage"));
+        }
+    }
+
+    /** Handles {@code /talkwith config server <key> [value]} — sends control packets to server. */
+    private void handleServerConfig(String[] args) {
+        switch (args[2].toLowerCase()) {
+            case "baseurl" -> {
+                if (args.length < 4) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.config.server.baseurl.usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setting_baseurl", args[3]));
+            }
+            case "keyset" -> {
+                if (args.length < 4) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.config.server.keyset.usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setting_apikey", args[3]));
+            }
+            case "model" -> {
+                if (args.length < 4) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.config.server.model.usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setting_model", args[3]));
+            }
+            case "prompt_file" -> {
+                if (args.length < 4) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.config.server.prompt_file.usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cfg_prompt_file", args[3]));
+            }
+            case "list_prompts" -> PacketHandler.INSTANCE
+                .sendToServer(new PacketSessionControl("cfg_list_prompts", ""));
+            default -> TextUtils.info(StatCollector.translateToLocal("talkwith.config.server.usage"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // /talkwith session <sub> [...]
+    // -------------------------------------------------------------------------
 
     private void handleSession(ICommandSender sender, String[] args) {
         switch (args[1].toLowerCase()) {
@@ -229,33 +279,22 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
                     return;
                 }
-                switch (args[2].toLowerCase()) {
-                    case "create" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("server_create", ""));
-                    case "setting" -> {
-                        if (args.length < 5) {
-                            TextUtils.error(StatCollector.translateToLocal("talkwith.session.server.setting.usage"));
-                            return;
-                        }
-                        switch (args[3].toLowerCase()) {
-                            case "model" -> PacketHandler.INSTANCE
-                                .sendToServer(new PacketSessionControl("setting_model", args[4]));
-                            case "baseurl" -> PacketHandler.INSTANCE
-                                .sendToServer(new PacketSessionControl("setting_baseurl", args[4]));
-                            case "apikey" -> PacketHandler.INSTANCE
-                                .sendToServer(new PacketSessionControl("setting_apikey", args[4]));
-                            default -> TextUtils
-                                .error(StatCollector.translateToLocalFormatted("talkwith.unknown_sub", args[3]));
-                        }
-                    }
-                    default -> TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
+                if (args[2].equalsIgnoreCase("create")) {
+                    // Optional name: /talkwith session server create [name]
+                    String name = args.length >= 4 ? args[3] : "";
+                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("server_create", name));
+                } else {
+                    TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
                 }
             }
             case "client" -> {
                 ClientProxy.currentSessionId = null;
+                ClientProxy.isSingleOverride = false;
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("client_create", ""));
             }
             case "delete" -> {
                 ClientProxy.currentSessionId = null;
+                ClientProxy.isSingleOverride = false;
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("delete", ""));
             }
             case "join" -> {
@@ -263,12 +302,14 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.session.join_usage"));
                     return;
                 }
-                // Do NOT pre-set currentSessionId; server sends PacketOpenGui on success
                 PacketHandler.INSTANCE.sendToServer(new PacketJoinSession(args[2]));
+            }
+            case "leave" -> {
+                ClientProxy.isSingleOverride = false;
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("leave", ""));
             }
             case "list" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("list", ""));
             case "info" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("info", ""));
-            case "leave" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("leave", ""));
             case "invite" -> {
                 if (args.length < 3) {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.session.invite_usage"));
@@ -315,61 +356,71 @@ public class TalkWithCommand extends CommandBase {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Tab completion
+    // -------------------------------------------------------------------------
+
     @Override
     @SuppressWarnings("unchecked")
     public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(
-                args,
-                "baseurl",
-                "keyset",
-                "model",
-                "system_prompt",
-                "reload",
-                "status",
-                "history",
-                "session",
-                "join",
-                "single",
-                "share",
-                "mute",
-                "unmute",
-                "kick",
-                "cooldown",
-                "close");
+            return getListOfStringsMatchingLastWord(args, "config", "status", "history", "session", "switch");
         }
         if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("history")) {
-                return getListOfStringsMatchingLastWord(args, "clear", "show");
+            switch (args[0].toLowerCase()) {
+                case "config":
+                    return getListOfStringsMatchingLastWord(args, "client", "server", "reload");
+                case "history":
+                    return getListOfStringsMatchingLastWord(args, "clear", "show");
+                case "session":
+                    return getListOfStringsMatchingLastWord(
+                        args,
+                        "server",
+                        "client",
+                        "delete",
+                        "join",
+                        "leave",
+                        "list",
+                        "info",
+                        "invite",
+                        "kick",
+                        "mute",
+                        "unmute",
+                        "cooldown",
+                        "history");
+                case "switch":
+                    return getListOfStringsMatchingLastWord(args, "single", "multi");
+            }
+        }
+        if (args.length == 3) {
+            if (args[0].equalsIgnoreCase("config")) {
+                if (args[1].equalsIgnoreCase("client")) {
+                    return getListOfStringsMatchingLastWord(
+                        args,
+                        "baseurl",
+                        "keyset",
+                        "model",
+                        "prompt_file",
+                        "list_prompts");
+                }
+                if (args[1].equalsIgnoreCase("server")) {
+                    return getListOfStringsMatchingLastWord(
+                        args,
+                        "baseurl",
+                        "keyset",
+                        "model",
+                        "prompt_file",
+                        "list_prompts");
+                }
             }
             if (args[0].equalsIgnoreCase("session")) {
-                return getListOfStringsMatchingLastWord(
-                    args,
-                    "server",
-                    "client",
-                    "delete",
-                    "join",
-                    "list",
-                    "info",
-                    "leave",
-                    "invite",
-                    "kick",
-                    "mute",
-                    "unmute",
-                    "cooldown",
-                    "history");
+                if (args[1].equalsIgnoreCase("server")) {
+                    return getListOfStringsMatchingLastWord(args, "create");
+                }
+                if (args[1].equalsIgnoreCase("history")) {
+                    return getListOfStringsMatchingLastWord(args, "clear");
+                }
             }
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("session") && args[1].equalsIgnoreCase("server")) {
-            return getListOfStringsMatchingLastWord(args, "create", "setting");
-        }
-        if (args.length == 3 && args[0].equalsIgnoreCase("session") && args[1].equalsIgnoreCase("history")) {
-            return getListOfStringsMatchingLastWord(args, "clear");
-        }
-        if (args.length == 4 && args[0].equalsIgnoreCase("session")
-            && args[1].equalsIgnoreCase("server")
-            && args[2].equalsIgnoreCase("setting")) {
-            return getListOfStringsMatchingLastWord(args, "model", "baseurl", "apikey");
         }
         return null;
     }

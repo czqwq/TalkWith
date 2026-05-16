@@ -20,6 +20,8 @@ public class ClientProxy extends CommonProxy {
     public static final ChatSession clientSession = new ChatSession();
     public static volatile boolean serverHasMod = false;
     public static String currentSessionId = null;
+    /** True when the player is in a session but has used {@code /talkwith switch single}. */
+    public static boolean isSingleOverride = false;
 
     private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
@@ -63,5 +65,6 @@ public class ClientProxy extends CommonProxy {
     public void onClientConnect(FMLNetworkEvent.ClientConnectedToServerEvent event) {
         serverHasMod = false;
         currentSessionId = null;
+        isSingleOverride = false;
     }
 }

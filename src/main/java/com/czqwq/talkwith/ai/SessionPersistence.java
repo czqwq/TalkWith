@@ -19,12 +19,19 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 /**
- * Persists server-side {@link SharedSession} data (conversation history + settings) to
- * {@code config/talkwith/sessions/<sessionId>.json} so that AI context survives server restarts.
+ * Handles (de)serialization of {@link SharedSession} to/from JSON.
  *
  * <p>
- * Sessions are automatically restored on server start via {@link #loadAll()}. Players need to
- * rejoin manually after a restart, but the full conversation history is immediately available.
+ * The primary save location is now {@link SessionWorldData} (world save).
+ * This class is retained for:
+ * <ul>
+ * <li>Migration from older versions (JSON files in {@code config/talkwith/sessions/}).</li>
+ * <li>The {@link #toJson}/{@link #fromJson} helpers used by {@link SessionWorldData}.</li>
+ * </ul>
+ *
+ * <p>
+ * {@link #save} and {@link #delete} are preserved for emergency/manual use;
+ * the main code path uses {@link SessionWorldData#markDirty()} instead.
  */
 public class SessionPersistence {
 
@@ -37,26 +44,25 @@ public class SessionPersistence {
     }
 
     // -------------------------------------------------------------------------
-    // Save
+    // JSON serialization helpers — used by SessionWorldData
     // -------------------------------------------------------------------------
 
-    /**
-     * Writes a session's full state to disk. Called after each successful AI reply so the file is
-     * always up-to-date. The write is lightweight (small JSON) and acceptable on the async thread.
-     */
-    public static void save(SharedSession session) {
-        if (sessionsDir == null) return;
+    /** Serializes a {@link SharedSession} to a JSON string. Returns null on error. */
+    public static String toJson(SharedSession session) {
         try {
             JsonObject obj = new JsonObject();
             obj.addProperty("sessionId", session.sessionId);
+            obj.addProperty("sessionName", session.sessionName != null ? session.sessionName : "");
             obj.addProperty("ownerUuid", session.ownerUuid.toString());
             obj.addProperty("ownerName", session.ownerName);
             obj.addProperty("ownerBaseUrl", session.ownerBaseUrl);
             obj.addProperty("ownerApiKey", session.ownerApiKey);
             obj.addProperty("sessionModel", session.sessionModel);
+            obj.addProperty(
+                "sessionPromptFile",
+                session.sessionPromptFile != null ? session.sessionPromptFile : "system_prompt.json");
             obj.addProperty("cooldown", session.cooldown);
 
-            // Full conversation history
             JsonArray histArray = new JsonArray();
             for (ChatMessage msg : session.session.getHistory()) {
                 JsonObject m = new JsonObject();
@@ -66,7 +72,6 @@ public class SessionPersistence {
             }
             obj.add("history", histArray);
 
-            // Recent exchanges (used for join-time history sync)
             JsonArray recentArray = new JsonArray();
             for (String[] entry : session.recentMessages) {
                 JsonArray e = new JsonArray();
@@ -76,24 +81,122 @@ public class SessionPersistence {
                 recentArray.add(e);
             }
             obj.add("recentMessages", recentArray);
-
-            File file = new File(sessionsDir, session.sessionId + ".json");
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
-            try {
-                writer.write(GSON.toJson(obj));
-            } finally {
-                writer.close();
-            }
+            return GSON.toJson(obj);
         } catch (Exception e) {
-            TalkWith.LOG.error("[TalkWith] Failed to save session " + session.sessionId, e);
+            TalkWith.LOG.error("[TalkWith] Failed to serialize session " + session.sessionId, e);
+            return null;
+        }
+    }
+
+    /**
+     * Deserializes a JSON string into a {@link SharedSession}.
+     * Returns null if the JSON is invalid or missing required fields.
+     * Backward-compatible: optional fields default gracefully.
+     */
+    public static SharedSession fromJson(String json) {
+        try {
+            JsonObject obj = GSON.fromJson(json, JsonObject.class);
+            if (obj == null) return null;
+
+            String sessionId = obj.get("sessionId")
+                .getAsString();
+            UUID ownerUuid = UUID.fromString(
+                obj.get("ownerUuid")
+                    .getAsString());
+            String ownerName = obj.get("ownerName")
+                .getAsString();
+            String ownerBaseUrl = obj.get("ownerBaseUrl")
+                .getAsString();
+            String ownerApiKey = obj.get("ownerApiKey")
+                .getAsString();
+            String sessionModel = obj.get("sessionModel")
+                .getAsString();
+            int cooldown = obj.get("cooldown")
+                .getAsInt();
+
+            SharedSession session = new SharedSession(
+                sessionId,
+                ownerUuid,
+                ownerName,
+                ownerBaseUrl,
+                ownerApiKey,
+                sessionModel,
+                cooldown);
+
+            // Optional fields (added in later versions)
+            if (obj.has("sessionName") && !obj.get("sessionName")
+                .getAsString()
+                .isEmpty()) {
+                session.sessionName = obj.get("sessionName")
+                    .getAsString();
+            }
+            if (obj.has("sessionPromptFile") && !obj.get("sessionPromptFile")
+                .getAsString()
+                .isEmpty()) {
+                session.sessionPromptFile = obj.get("sessionPromptFile")
+                    .getAsString();
+            }
+
+            if (obj.has("history")) {
+                List<ChatMessage> history = new ArrayList<>();
+                for (JsonElement el : obj.getAsJsonArray("history")) {
+                    JsonObject m = el.getAsJsonObject();
+                    history.add(
+                        new ChatMessage(
+                            m.get("role")
+                                .getAsString(),
+                            m.get("content")
+                                .getAsString()));
+                }
+                session.session.loadHistory(history);
+            }
+
+            if (obj.has("recentMessages")) {
+                for (JsonElement el : obj.getAsJsonArray("recentMessages")) {
+                    JsonArray e = el.getAsJsonArray();
+                    session.recentMessages.add(
+                        new String[] { e.get(0)
+                            .getAsString(),
+                            e.get(1)
+                                .getAsString(),
+                            e.get(2)
+                                .getAsString() });
+                }
+            }
+
+            return session;
+        } catch (Exception e) {
+            TalkWith.LOG.error("[TalkWith] Failed to deserialize session JSON", e);
+            return null;
         }
     }
 
     // -------------------------------------------------------------------------
-    // Delete
+    // File-based save/delete — kept for emergency/manual use and migration
     // -------------------------------------------------------------------------
 
-    /** Removes the on-disk file for a session that has been closed or deleted. */
+    /**
+     * Writes a session's full state to {@code config/talkwith/sessions/<id>.json}.
+     * Prefer {@link SessionWorldData#markDirty()} for normal operation.
+     */
+    public static void save(SharedSession session) {
+        if (sessionsDir == null) return;
+        String json = toJson(session);
+        if (json == null) return;
+        try {
+            File file = new File(sessionsDir, session.sessionId + ".json");
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
+            try {
+                writer.write(json);
+            } finally {
+                writer.close();
+            }
+        } catch (Exception e) {
+            TalkWith.LOG.error("[TalkWith] Failed to save session file " + session.sessionId, e);
+        }
+    }
+
+    /** Removes the on-disk file for a session that has been closed. */
     public static void delete(String sessionId) {
         if (sessionsDir == null) return;
         File file = new File(sessionsDir, sessionId + ".json");
@@ -103,15 +206,12 @@ public class SessionPersistence {
     }
 
     // -------------------------------------------------------------------------
-    // Load
+    // Migration: load all JSON files (used on first run with new world-save system)
     // -------------------------------------------------------------------------
 
     /**
-     * Scans {@code sessions/} and restores all previously saved sessions into
-     * {@link SharedSession#sessions}. Called once during server startup.
-     *
-     * <p>
-     * Restored sessions have an empty {@code players} set — members must rejoin after a restart.
+     * Scans {@code config/talkwith/sessions/} and loads any saved sessions.
+     * Used only for one-time migration to {@link SessionWorldData}.
      */
     public static void loadAll() {
         if (sessionsDir == null || !sessionsDir.exists()) return;
@@ -127,7 +227,8 @@ public class SessionPersistence {
         int loaded = 0;
         for (File file : files) {
             try {
-                SharedSession session = readSession(file);
+                String raw = readFileUtf8(file);
+                SharedSession session = fromJson(raw);
                 if (session != null) {
                     SharedSession.sessions.put(session.sessionId, session);
                     loaded++;
@@ -137,69 +238,8 @@ public class SessionPersistence {
             }
         }
         if (loaded > 0) {
-            TalkWith.LOG.info("[TalkWith] Restored " + loaded + " session(s) from disk.");
+            TalkWith.LOG.info("[TalkWith] Migrated " + loaded + " session(s) from JSON files.");
         }
-    }
-
-    private static SharedSession readSession(File file) throws Exception {
-        String raw = readFileUtf8(file);
-        JsonObject obj = GSON.fromJson(raw, JsonObject.class);
-
-        String sessionId = obj.get("sessionId")
-            .getAsString();
-        UUID ownerUuid = UUID.fromString(
-            obj.get("ownerUuid")
-                .getAsString());
-        String ownerName = obj.get("ownerName")
-            .getAsString();
-        String ownerBaseUrl = obj.get("ownerBaseUrl")
-            .getAsString();
-        String ownerApiKey = obj.get("ownerApiKey")
-            .getAsString();
-        String sessionModel = obj.get("sessionModel")
-            .getAsString();
-        int cooldown = obj.get("cooldown")
-            .getAsInt();
-
-        SharedSession session = new SharedSession(
-            sessionId,
-            ownerUuid,
-            ownerName,
-            ownerBaseUrl,
-            ownerApiKey,
-            sessionModel,
-            cooldown);
-
-        // Restore history
-        if (obj.has("history")) {
-            List<ChatMessage> history = new ArrayList<>();
-            for (JsonElement el : obj.getAsJsonArray("history")) {
-                JsonObject m = el.getAsJsonObject();
-                history.add(
-                    new ChatMessage(
-                        m.get("role")
-                            .getAsString(),
-                        m.get("content")
-                            .getAsString()));
-            }
-            session.session.loadHistory(history);
-        }
-
-        // Restore recent messages
-        if (obj.has("recentMessages")) {
-            for (JsonElement el : obj.getAsJsonArray("recentMessages")) {
-                JsonArray e = el.getAsJsonArray();
-                session.recentMessages.add(
-                    new String[] { e.get(0)
-                        .getAsString(),
-                        e.get(1)
-                            .getAsString(),
-                        e.get(2)
-                            .getAsString() });
-            }
-        }
-
-        return session;
     }
 
     private static String readFileUtf8(File file) throws Exception {

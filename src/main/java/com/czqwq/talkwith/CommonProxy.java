@@ -31,7 +31,8 @@ public class CommonProxy {
     public void postInit(FMLPostInitializationEvent event) {}
 
     public void serverStarting(FMLServerStartingEvent event) {
-        SessionPersistence.loadAll();
+        // Session restoration happens in ServerEventHandler.onWorldLoad (WorldEvent.Load for dim 0).
+        // SessionPersistence.init() is still called in preInit for the migration fallback path.
         MinecraftForge.EVENT_BUS.register(new ServerEventHandler());
     }
 }

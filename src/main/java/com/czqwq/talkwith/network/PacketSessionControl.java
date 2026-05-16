@@ -1,5 +1,6 @@
 package com.czqwq.talkwith.network;
 
+import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -9,7 +10,8 @@ import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.Config;
-import com.czqwq.talkwith.ai.SessionPersistence;
+import com.czqwq.talkwith.ServerEventHandler;
+import com.czqwq.talkwith.ai.SessionWorldData;
 import com.czqwq.talkwith.ai.SharedSession;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -67,7 +69,9 @@ public class PacketSessionControl implements IMessage {
             String playerName = player.getCommandSenderName();
             MinecraftServer server = MinecraftServer.getServer();
 
-            // --- Actions that create a session or don't require one ---
+            // ----------------------------------------------------------------
+            // Actions that don't require an existing session
+            // ----------------------------------------------------------------
 
             if ("share".equals(msg.action) || "invite".equals(msg.action)) {
                 EntityPlayerMP targetPlayer = server.getConfigurationManager()
@@ -76,7 +80,6 @@ public class PacketSessionControl implements IMessage {
                     player.addChatMessage(errf("talkwith.session.player_not_found", msg.target));
                     return null;
                 }
-                // Invite to existing owned session, or create a new one
                 SharedSession existing = getOwnedSession(playerUuid);
                 SharedSession session;
                 if (existing != null) {
@@ -88,24 +91,29 @@ public class PacketSessionControl implements IMessage {
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
                 }
                 PacketHandler.INSTANCE.sendTo(new PacketShareInvite(playerName, session.sessionId), targetPlayer);
+                SessionWorldData.save();
                 return null;
             }
 
             if ("server_create".equals(msg.action)) {
-                // Reject if player is already in any session
                 if (getPlayerSession(playerUuid) != null) {
                     player.addChatMessage(err("talkwith.session.already_in"));
                     return null;
                 }
                 SharedSession newSession = new SharedSession(playerUuid, playerName, "", "", "");
+                // msg.target holds the optional human-readable name
+                if (msg.target != null && !msg.target.isEmpty()) {
+                    newSession.sessionName = msg.target;
+                }
                 SharedSession.sessions.put(newSession.sessionId, newSession);
-                player.addChatMessage(okf("talkwith.session.created", newSession.sessionId));
+                String displayName = newSession.sessionName.isEmpty() ? newSession.sessionId : newSession.sessionName;
+                player.addChatMessage(okf("talkwith.session.created", displayName));
                 PacketHandler.INSTANCE.sendTo(new PacketOpenGui(newSession.sessionId), player);
+                SessionWorldData.save();
                 return null;
             }
 
             if ("client_create".equals(msg.action)) {
-                // Close any session the player owns
                 SharedSession owned = getOwnedSession(playerUuid);
                 if (owned != null) {
                     SharedSession.sessions.remove(owned.sessionId);
@@ -119,13 +127,14 @@ public class PacketSessionControl implements IMessage {
                         }
                     }
                 }
-                // Also leave any session the player joined as a non-owner member
                 SharedSession joined = getPlayerSession(playerUuid);
                 if (joined != null) {
                     joined.players.remove(playerUuid);
                 }
+                ServerEventHandler.singleModeOverride.remove(playerUuid);
                 PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 player.addChatMessage(ok("talkwith.session.delete_ok"));
+                SessionWorldData.save();
                 return null;
             }
 
@@ -135,8 +144,9 @@ public class PacketSessionControl implements IMessage {
                 } else {
                     player.addChatMessage(okf("talkwith.session.list_header", SharedSession.sessions.size()));
                     for (SharedSession s : SharedSession.sessions.values()) {
+                        String nameOrId = s.sessionName.isEmpty() ? s.sessionId : s.sessionName;
                         player.addChatMessage(
-                            okf("talkwith.session.list_entry", s.sessionId, s.ownerName, s.players.size()));
+                            okf("talkwith.session.list_entry", nameOrId, s.ownerName, s.players.size()));
                     }
                 }
                 return null;
@@ -147,10 +157,12 @@ public class PacketSessionControl implements IMessage {
                 if (infoSession == null) {
                     player.addChatMessage(ok("talkwith.session.info_none"));
                 } else {
+                    String nameOrId = infoSession.sessionName.isEmpty() ? infoSession.sessionId
+                        : infoSession.sessionName;
                     player.addChatMessage(
                         okf(
                             "talkwith.session.info",
-                            infoSession.sessionId,
+                            nameOrId,
                             infoSession.ownerName,
                             infoSession.players.size(),
                             infoSession.sessionModel));
@@ -158,7 +170,48 @@ public class PacketSessionControl implements IMessage {
                 return null;
             }
 
-            // --- Actions that require an existing session ---
+            // status_info: rich status query used by /talkwith status (server session mode)
+            if ("status_info".equals(msg.action)) {
+                SharedSession s = getPlayerSession(playerUuid);
+                if (s == null) {
+                    player.addChatMessage(ok("talkwith.session.info_none"));
+                    return null;
+                }
+                boolean isOwner = s.ownerUuid.equals(playerUuid);
+                boolean isMulti = s.players.size() > 1;
+                boolean isSingleOverride = ServerEventHandler.singleModeOverride.contains(playerUuid);
+                String nameOrId = s.sessionName.isEmpty() ? s.sessionId : s.sessionName;
+                String roleKey = isOwner ? "talkwith.status.role.owner" : "talkwith.status.role.member";
+                String modeKey = isSingleOverride ? "talkwith.status.mode.single_override"
+                    : (isMulti ? "talkwith.status.mode.multi" : "talkwith.status.mode.single");
+                player.addChatMessage(
+                    okf(
+                        "talkwith.status.session_detail",
+                        new ChatComponentTranslation(modeKey),
+                        new ChatComponentTranslation(roleKey),
+                        nameOrId,
+                        s.players.size(),
+                        s.sessionPromptFile));
+                return null;
+            }
+
+            // cfg_list_prompts: list available prompt JSON files in config/talkwith/
+            if ("cfg_list_prompts".equals(msg.action)) {
+                List<String> files = Config.listPromptFiles();
+                if (files.isEmpty()) {
+                    player.addChatMessage(ok("talkwith.config.prompts_list_empty"));
+                } else {
+                    player.addChatMessage(okf("talkwith.config.prompts_list_header", files.size()));
+                    for (String f : files) {
+                        player.addChatMessage(new ChatComponentText("§7 - §f" + f));
+                    }
+                }
+                return null;
+            }
+
+            // ----------------------------------------------------------------
+            // Actions that require an existing session
+            // ----------------------------------------------------------------
 
             SharedSession session = getPlayerSession(playerUuid);
 
@@ -168,17 +221,28 @@ public class PacketSessionControl implements IMessage {
             }
 
             switch (msg.action) {
+                case "switch_single" -> {
+                    // Enter single-mode override: > messages go to local AI
+                    ServerEventHandler.singleModeOverride.add(playerUuid);
+                    player.addChatMessage(ok("talkwith.switch.single.ok"));
+                }
+                case "switch_multi" -> {
+                    // Return to session AI routing
+                    ServerEventHandler.singleModeOverride.remove(playerUuid);
+                    player.addChatMessage(ok("talkwith.switch.multi.ok"));
+                }
                 case "single" -> {
                     session.players.remove(playerUuid);
                     if (session.players.isEmpty() || session.ownerUuid.equals(playerUuid)) {
                         SharedSession.sessions.remove(session.sessionId);
+                        SessionWorldData.save();
                     }
+                    ServerEventHandler.singleModeOverride.remove(playerUuid);
                     player.addChatMessage(ok("talkwith.session.left"));
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 }
                 case "leave" -> {
                     if (session.ownerUuid.equals(playerUuid)) {
-                        // Owner leaving: transfer to next member or close
                         UUID newOwnerUuid = null;
                         String newOwnerName = null;
                         for (UUID uuid : session.players) {
@@ -195,19 +259,19 @@ public class PacketSessionControl implements IMessage {
                         if (newOwnerUuid != null) {
                             session.ownerUuid = newOwnerUuid;
                             session.ownerName = newOwnerName;
-                            SessionPersistence.save(session);
+                            SessionWorldData.save();
                             EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
                             if (newOwnerPlayer != null) {
                                 newOwnerPlayer.addChatMessage(ok("talkwith.session.owner_transferred"));
                             }
                         } else {
                             SharedSession.sessions.remove(session.sessionId);
-                            // History intentionally preserved on disk for potential future restore
+                            SessionWorldData.save();
                         }
                     } else {
-                        // Non-owner leaving
                         session.players.remove(playerUuid);
                     }
+                    ServerEventHandler.singleModeOverride.remove(playerUuid);
                     player.addChatMessage(ok("talkwith.session.left"));
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 }
@@ -218,8 +282,9 @@ public class PacketSessionControl implements IMessage {
                             return null;
                         }
                         SharedSession.sessions.remove(session.sessionId);
-                        SessionPersistence.delete(session.sessionId);
+                        SessionWorldData.save();
                         for (UUID uuid : session.players) {
+                            ServerEventHandler.singleModeOverride.remove(uuid);
                             EntityPlayerMP member = getPlayerByUUID(server, uuid);
                             if (member != null) {
                                 member.addChatMessage(err("talkwith.session.closed"));
@@ -236,6 +301,7 @@ public class PacketSessionControl implements IMessage {
                         return null;
                     }
                     session.sessionModel = msg.target;
+                    SessionWorldData.save();
                     player.addChatMessage(okf("talkwith.session.setting_model", msg.target));
                 }
                 case "setting_baseurl" -> {
@@ -244,6 +310,7 @@ public class PacketSessionControl implements IMessage {
                         return null;
                     }
                     session.ownerBaseUrl = msg.target;
+                    SessionWorldData.save();
                     player.addChatMessage(okf("talkwith.session.setting_baseurl", msg.target));
                 }
                 case "setting_apikey" -> {
@@ -252,7 +319,20 @@ public class PacketSessionControl implements IMessage {
                         return null;
                     }
                     session.ownerApiKey = msg.target;
+                    SessionWorldData.save();
                     player.addChatMessage(ok("talkwith.session.setting_apikey"));
+                }
+                case "cfg_prompt_file" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    String filename = Config.sanitizePromptFilename(msg.target);
+                    // Ensure the file exists (creates default if missing)
+                    Config.loadPromptFromFile(filename);
+                    session.sessionPromptFile = filename;
+                    SessionWorldData.save();
+                    player.addChatMessage(okf("talkwith.config.prompt_file.set", filename));
                 }
                 case "mute" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
@@ -287,6 +367,7 @@ public class PacketSessionControl implements IMessage {
                         .func_152612_a(msg.target);
                     if (targetPlayer != null) {
                         session.players.remove(targetPlayer.getUniqueID());
+                        ServerEventHandler.singleModeOverride.remove(targetPlayer.getUniqueID());
                         targetPlayer.addChatMessage(err("talkwith.session.kicked"));
                         PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), targetPlayer);
                         player.addChatMessage(okf("talkwith.session.kicked_player", msg.target));
@@ -299,6 +380,7 @@ public class PacketSessionControl implements IMessage {
                     }
                     try {
                         session.cooldown = Integer.parseInt(msg.target);
+                        SessionWorldData.save();
                         player.addChatMessage(okf("talkwith.session.cooldown_set", session.cooldown));
                     } catch (NumberFormatException e) {
                         player.addChatMessage(err("talkwith.session.invalid_cooldown"));
@@ -310,8 +392,9 @@ public class PacketSessionControl implements IMessage {
                         return null;
                     }
                     SharedSession.sessions.remove(session.sessionId);
-                    SessionPersistence.delete(session.sessionId);
+                    SessionWorldData.save();
                     for (UUID uuid : session.players) {
+                        ServerEventHandler.singleModeOverride.remove(uuid);
                         EntityPlayerMP member = getPlayerByUUID(server, uuid);
                         if (member != null) {
                             member.addChatMessage(err("talkwith.session.closed"));
@@ -327,7 +410,7 @@ public class PacketSessionControl implements IMessage {
                     }
                     session.session.clear();
                     session.recentMessages.clear();
-                    SessionPersistence.delete(session.sessionId);
+                    SessionWorldData.save();
                     player.addChatMessage(ok("talkwith.session.history_cleared"));
                 }
                 default -> player.addChatMessage(errf("talkwith.unknown_sub", msg.action));

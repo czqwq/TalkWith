@@ -104,7 +104,7 @@ public class Config {
     /**
      * Loads the {@code prompt} field from {@code <configDir>/<filename>}.
      * If the file does not exist, it is created with default content and the
-     * default prompt string is returned.  Filename must not contain path
+     * default prompt string is returned. Filename must not contain path
      * separators (validated by the caller or by {@link #sanitizePromptFilename}).
      */
     public static String loadPromptFromFile(String filename) {
@@ -139,7 +139,8 @@ public class Config {
         File[] files = configDir.listFiles();
         if (files == null) return result;
         for (File f : files) {
-            if (f.isFile() && f.getName().endsWith(".json")) {
+            if (f.isFile() && f.getName()
+                .endsWith(".json")) {
                 result.add(f.getName());
             }
         }
@@ -165,8 +166,7 @@ public class Config {
             JsonObject obj = new JsonObject();
             obj.addProperty("prompt", prompt);
             String json = new Gson().toJson(obj);
-            BufferedWriter writer = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
             try {
                 writer.write(json);
             } finally {

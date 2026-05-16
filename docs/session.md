@@ -38,30 +38,35 @@ TalkWith 支持两种运行模式：
 **Disconnect behavior / 断线行为**
 
 - Owner disconnects with online members → ownership automatically transferred to the next online member.
-- Owner disconnects with no online members → session removed from memory; **history file kept on disk** and restored on next server start.
+- Owner disconnects with no online members → session removed from memory; **history saved in world data** (`<world>/data/talkwith_sessions.dat`) and restored on next server start.
 - Member disconnects → silently removed from the session.
 
 ---
 
 ## Conversation History Persistence / 对话历史持久化
 
-Server-side session history is automatically saved to disk after each AI reply:
+Server-side session history is automatically saved into the **world save** after each AI reply:
 
 ```
-config/talkwith/sessions/<sessionId>.json
+<world>/data/talkwith_sessions.dat
 ```
 
-On server restart, all saved sessions are restored (with their full conversation history). Players need to manually rejoin after a restart via `/talkwith session join <id>` or `/talkwith session list`.
+On server restart, all sessions are restored with their full conversation history. Players need to
+manually rejoin after a restart via `/talkwith session join <name-or-id>` or `/talkwith session list`.
+
+> **Upgrade note:** On first start after upgrading, existing sessions in `config/talkwith/sessions/`
+> are automatically migrated to world save data. The old JSON files are kept but no longer updated.
 
 To permanently wipe a session's history, use `/talkwith session history clear` (owner only).
 
-服务端会话的对话历史在每次 AI 回复后自动保存到磁盘：
+服务端会话的对话历史在每次 AI 回复后自动保存到**存档**中：
 
 ```
-config/talkwith/sessions/<sessionId>.json
+<world>/data/talkwith_sessions.dat
 ```
 
-服务端重启后，所有已保存的会话（含完整对话历史）会自动恢复。玩家重新加入后可继续之前的对话。使用 `/talkwith session history clear`（仅所有者）可永久清空历史记录。
+服务端重启后，所有已保存的会话（含完整对话历史）会自动恢复。玩家重新加入后可继续之前的对话。
+使用 `/talkwith session history clear`（仅所有者）可永久清空历史记录。
 
 ---
 
@@ -125,7 +130,7 @@ Closes your owned session (and notifies all members) OR leaves a joined session.
 /talkwith session leave
 ```
 
-Leaves the current session without deleting it. If you are the owner, ownership is transferred to the next online member. If no other members are online, the session is closed but **history is preserved on disk**.
+Leaves the current session without deleting it. If you are the owner, ownership is transferred to the next online member. If no other members are online, the session is closed but **history is preserved in world save data**.
 
 退出当前会话而不删除它。若你是所有者，所有权将转移给下一个在线成员。若无其他在线成员，会话关闭但**历史记录保留在磁盘上**。
 
@@ -183,21 +188,25 @@ Shows information about the session you are currently in.
 
 ### Session Settings (Owner Only) / 会话设置（仅所有者）
 
-Configure the AI endpoint used for the session. These override the server's global config for this session only.
+Configure the AI endpoint and prompt used for the session via the unified `config server` tree.
 
-配置该会话使用的 AI 接口。这些设置仅覆盖本会话的全局配置。
+配置该会话使用的 AI 接口和提示词，通过统一的 `config server` 命令树。
 
 ```
-/talkwith session server setting model <modelName>
-/talkwith session server setting baseurl <url>
-/talkwith session server setting apikey <key>
+/talkwith config server model <modelName>
+/talkwith config server baseurl <url>
+/talkwith config server keyset <key>
+/talkwith config server prompt_file <filename.json>
+/talkwith config server list_prompts
 ```
 
 **Examples / 示例:**
 ```
-/talkwith session server setting model gpt-4o
-/talkwith session server setting baseurl https://api.openai.com
-/talkwith session server setting apikey sk-...
+/talkwith config server model gpt-4o
+/talkwith config server baseurl https://api.openai.com
+/talkwith config server keyset sk-...
+/talkwith config server prompt_file dungeon_master.json
+/talkwith config server list_prompts
 ```
 
 ---
@@ -270,10 +279,10 @@ Same as `delete` — closes the session, notifies all members, and deletes the h
 
 ### Singleplayer / 单人游戏
 
-1. Configure your API: `/talkwith baseurl <url>`, `/talkwith keyset <key>`, `/talkwith model <model>`
+1. Configure your API: `/talkwith config client baseurl <url>`, `/talkwith config client keyset <key>`, `/talkwith config client model <model>`
 2. Type `> Hello!` in chat to talk to AI.
 
-1. 配置 API：`/talkwith baseurl <地址>`，`/talkwith keyset <密钥>`，`/talkwith model <模型>`
+1. 配置 API：`/talkwith config client baseurl <地址>`，`/talkwith config client keyset <密钥>`，`/talkwith config client model <模型>`
 2. 在聊天框输入 `> 你好！` 与 AI 对话。
 
 ### LAN / 局域网
@@ -282,14 +291,14 @@ Same as singleplayer. The `>` shortcut works. If you want friends to share the s
 
 与单人游戏相同。如需与朋友共享同一 AI 上下文：
 
-1. Host: `/talkwith session server create`
+1. Host: `/talkwith session server create myteam`
 2. Host: `/talkwith session invite <friend>`
-3. Friend clicks the join link in chat.
+3. Friend clicks the join link, or runs `/talkwith session join myteam`
 4. Both players type `> message` to interact with the shared AI.
 
-1. 主机：`/talkwith session server create`
+1. 主机：`/talkwith session server create myteam`
 2. 主机：`/talkwith session invite <朋友名>`
-3. 朋友点击聊天中的加入链接。
+3. 朋友点击聊天中的加入链接，或运行 `/talkwith session join myteam`
 4. 双方输入 `> 消息` 与共享 AI 互动。
 
 ### Dedicated Server / 专用服务器
@@ -299,10 +308,11 @@ Same flow as LAN. Session history persists across restarts — after a server re
 流程与局域网相同。**会话历史在服务端重启后自动恢复**，玩家重新加入即可继续之前的对话：
 
 ```
-/talkwith session server create
-/talkwith session server setting baseurl https://api.openai.com
-/talkwith session server setting apikey sk-...
-/talkwith session server setting model gpt-4o
+/talkwith session server create team1
+/talkwith config server baseurl https://api.openai.com
+/talkwith config server keyset sk-...
+/talkwith config server model gpt-4o
+/talkwith config server prompt_file dungeon_master.json
 /talkwith session invite <player1>
 /talkwith session invite <player2>
 ```
@@ -310,25 +320,17 @@ Same flow as LAN. Session history persists across restarts — after a server re
 After restart / 重启后：
 ```
 /talkwith session list          # see restored sessions / 查看已恢复的会话
-/talkwith session join <id>     # rejoin and continue / 重新加入并继续
+/talkwith session join team1    # rejoin by name / 按名称重新加入
 ```
 
----
+### Switching Modes / 切换模式
 
-## Legacy Commands / 旧版命令（向后兼容）
+While in a shared session, use `/talkwith switch` to toggle between session AI and local AI without leaving:
 
-The following commands from older versions still work:
+在共享会话中，使用 `/talkwith switch` 在会话 AI 和本地 AI 之间切换而不退出会话：
 
-以下旧版命令仍然可用：
-
-| Old / 旧命令 | New equivalent / 新命令 |
-|---|---|
-| `/talkwith share <player>` | `/talkwith session invite <player>` |
-| `/talkwith join <id>` | `/talkwith session join <id>` |
-| `/talkwith single` | `/talkwith session client` |
-| `/talkwith kick <player>` | `/talkwith session kick <player>` |
-| `/talkwith mute <player>` | `/talkwith session mute <player>` |
-| `/talkwith unmute <player>` | `/talkwith session unmute <player>` |
-| `/talkwith cooldown <sec>` | `/talkwith session cooldown <sec>` |
-| `/talkwith close` | `/talkwith session close` |
-
+```
+/talkwith switch single   # ">" goes to your local AI
+/talkwith switch multi    # ">" goes back to the shared session AI
+/talkwith status          # shows current mode and session details
+```

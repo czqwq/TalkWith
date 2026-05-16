@@ -46,7 +46,19 @@ public class PacketJoinSession implements IMessage {
         @Override
         public IMessage onMessage(PacketJoinSession msg, MessageContext ctx) {
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
-            SharedSession session = SharedSession.sessions.get(msg.sessionId);
+
+            // Resolve by name first, then fall back to exact session-ID match
+            SharedSession session = null;
+            for (SharedSession s : SharedSession.sessions.values()) {
+                if (!s.sessionName.isEmpty() && s.sessionName.equalsIgnoreCase(msg.sessionId)) {
+                    session = s;
+                    break;
+                }
+            }
+            if (session == null) {
+                session = SharedSession.sessions.get(msg.sessionId);
+            }
+
             if (session == null) {
                 player.addChatMessage(err("talkwith.session.not_found"));
                 return null;
@@ -56,8 +68,9 @@ public class PacketJoinSession implements IMessage {
                 return null;
             }
             session.players.add(player.getUniqueID());
-            player.addChatMessage(okf("talkwith.session.joined", msg.sessionId));
-            PacketHandler.INSTANCE.sendTo(new PacketOpenGui(msg.sessionId), player);
+            String displayName = session.sessionName.isEmpty() ? session.sessionId : session.sessionName;
+            player.addChatMessage(okf("talkwith.session.joined", displayName));
+            PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
             // Send recent history so the joining player has context
             for (String[] entry : session.recentMessages) {
                 PacketHandler.INSTANCE.sendTo(new PacketSessionBroadcast(entry[0], entry[1], entry[2]), player);
