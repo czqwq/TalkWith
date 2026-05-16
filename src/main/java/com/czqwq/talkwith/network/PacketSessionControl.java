@@ -100,10 +100,24 @@ public class PacketSessionControl implements IMessage {
                     player.addChatMessage(err("talkwith.session.already_in"));
                     return null;
                 }
-                SharedSession newSession = new SharedSession(playerUuid, playerName, "", "", "");
-                // msg.target holds the optional human-readable name
-                if (msg.target != null && !msg.target.isEmpty()) {
-                    newSession.sessionName = msg.target;
+                String proposedName = (msg.target != null) ? msg.target.trim() : "";
+                if (!proposedName.isEmpty()) {
+                    for (SharedSession s : SharedSession.sessions.values()) {
+                        if (proposedName.equals(s.sessionName)) {
+                            player.addChatMessage(errf("talkwith.session.name_taken", proposedName));
+                            return null;
+                        }
+                    }
+                }
+                // Initialise with the server's config defaults so the session works out of the box
+                SharedSession newSession = new SharedSession(
+                    playerUuid,
+                    playerName,
+                    Config.baseUrl,
+                    Config.apiKey,
+                    Config.model);
+                if (!proposedName.isEmpty()) {
+                    newSession.sessionName = proposedName;
                 }
                 SharedSession.sessions.put(newSession.sessionId, newSession);
                 String displayName = newSession.sessionName.isEmpty() ? newSession.sessionId : newSession.sessionName;
@@ -437,6 +451,26 @@ public class PacketSessionControl implements IMessage {
                     session.recentMessages.clear();
                     SessionWorldData.save();
                     player.addChatMessage(ok("talkwith.session.history_cleared"));
+                }
+                case "rename" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    String newName = msg.target != null ? msg.target.trim() : "";
+                    if (newName.isEmpty()) {
+                        player.addChatMessage(err("talkwith.session.rename_usage"));
+                        return null;
+                    }
+                    for (SharedSession s : SharedSession.sessions.values()) {
+                        if (!s.sessionId.equals(session.sessionId) && newName.equals(s.sessionName)) {
+                            player.addChatMessage(errf("talkwith.session.name_taken", newName));
+                            return null;
+                        }
+                    }
+                    session.sessionName = newName;
+                    SessionWorldData.save();
+                    player.addChatMessage(okf("talkwith.session.renamed", newName));
                 }
                 default -> player.addChatMessage(errf("talkwith.unknown_sub", msg.action));
             }

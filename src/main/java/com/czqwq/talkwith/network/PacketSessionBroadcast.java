@@ -43,7 +43,7 @@ public class PacketSessionBroadcast implements IMessage {
         public IMessage onMessage(PacketSessionBroadcast msg, MessageContext ctx) {
             ClientProxy.scheduleOnMainThread(() -> {
                 TextUtils.addChatMessage("§e[" + msg.playerName + "]: §f" + msg.playerMsg);
-                TextUtils.addChatMessage("§b[AI]: §r" + msg.aiReply);
+                TextUtils.sendAIReply("§b[AI]: §r", msg.aiReply);
             });
             return null;
         }

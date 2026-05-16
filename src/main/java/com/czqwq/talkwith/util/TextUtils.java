@@ -31,8 +31,10 @@ public class TextUtils {
      * stripping raw control characters (e.g. bare LF/CR) that would appear as
      * placeholder text ("LF", "CR") in Minecraft 1.7.10's FontRenderer.
      *
-     * <p>The first segment is shown with {@code linePrefix}; continuation lines
-     * are indented so the reader can follow the full reply.</p>
+     * <p>
+     * The first segment is shown with {@code linePrefix}; continuation lines
+     * are indented so the reader can follow the full reply.
+     * </p>
      *
      * @param linePrefix prefix for the first message, e.g. {@code "§b[AI]: §r"}
      * @param reply      raw AI reply (may contain {@code \n}, {@code \r\n}, etc.)
@@ -41,7 +43,8 @@ public class TextUtils {
         if (reply == null || reply.isEmpty()) return;
 
         // Normalize all line-ending variants to \n
-        String normalized = reply.replace("\r\n", "\n").replace("\r", "\n");
+        String normalized = reply.replace("\r\n", "\n")
+            .replace("\r", "\n");
 
         // Strip control characters that Minecraft cannot render (keep \n for splitting,
         // keep printable chars >= 0x20 including MC §-codes)
@@ -54,7 +57,8 @@ public class TextUtils {
         }
 
         // Split on newlines
-        String[] parts = sb.toString().split("\n", -1);
+        String[] parts = sb.toString()
+            .split("\n", -1);
         boolean firstMsg = true;
         for (String line : parts) {
             if (line.isEmpty()) continue; // skip blank lines
@@ -64,12 +68,14 @@ public class TextUtils {
                 int cut = MAX_LINE_LENGTH;
                 int space = line.lastIndexOf(' ', cut);
                 if (space > cut / 2) cut = space;
-                String chunk = line.substring(0, cut).trim();
+                String chunk = line.substring(0, cut)
+                    .trim();
                 if (!chunk.isEmpty()) {
                     addChatMessage(firstMsg ? linePrefix + chunk : "§7  §r" + chunk);
                     firstMsg = false;
                 }
-                line = line.substring(cut).trim();
+                line = line.substring(cut)
+                    .trim();
             }
 
             if (!line.isEmpty()) {

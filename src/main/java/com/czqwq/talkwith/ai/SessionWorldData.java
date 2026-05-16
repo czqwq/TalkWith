@@ -1,5 +1,9 @@
 package com.czqwq.talkwith.ai;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.server.MinecraftServer;
@@ -32,6 +36,13 @@ public class SessionWorldData extends WorldSavedData {
     /** NBT list element type: 10 = NBTTagCompound */
     private static final int NBT_COMPOUND = 10;
 
+    /**
+     * Maps playerUuid → sessionId for players who disconnected while inside a session.
+     * Consumed on reconnect to restore the player to their previous session automatically.
+     * Persisted inside the world save alongside session data.
+     */
+    public static final Map<UUID, String> playerSessionMap = new ConcurrentHashMap<>();
+
     public SessionWorldData(String name) {
         super(name);
     }
@@ -44,22 +55,39 @@ public class SessionWorldData extends WorldSavedData {
     public void readFromNBT(NBTTagCompound nbt) {
         // Clear existing sessions — this is only called once on world load.
         SharedSession.sessions.clear();
-        if (!nbt.hasKey("sessions")) return;
+        playerSessionMap.clear();
 
-        NBTTagList list = nbt.getTagList("sessions", NBT_COMPOUND);
-        int loaded = 0;
-        for (int i = 0; i < list.tagCount(); i++) {
-            NBTTagCompound entry = list.getCompoundTagAt(i);
-            String json = entry.getString("data");
-            if (json == null || json.isEmpty()) continue;
-            SharedSession session = SessionPersistence.fromJson(json);
-            if (session != null) {
-                SharedSession.sessions.put(session.sessionId, session);
-                loaded++;
+        if (nbt.hasKey("sessions")) {
+            NBTTagList list = nbt.getTagList("sessions", NBT_COMPOUND);
+            int loaded = 0;
+            for (int i = 0; i < list.tagCount(); i++) {
+                NBTTagCompound entry = list.getCompoundTagAt(i);
+                String json = entry.getString("data");
+                if (json == null || json.isEmpty()) continue;
+                SharedSession session = SessionPersistence.fromJson(json);
+                if (session != null) {
+                    SharedSession.sessions.put(session.sessionId, session);
+                    loaded++;
+                }
+            }
+            if (loaded > 0) {
+                TalkWith.LOG.info("[TalkWith] Restored " + loaded + " session(s) from world save data.");
             }
         }
-        if (loaded > 0) {
-            TalkWith.LOG.info("[TalkWith] Restored " + loaded + " session(s) from world save data.");
+
+        // Restore player→session mapping for reconnect restoration
+        if (nbt.hasKey("playerSessions")) {
+            NBTTagList psList = nbt.getTagList("playerSessions", NBT_COMPOUND);
+            for (int i = 0; i < psList.tagCount(); i++) {
+                NBTTagCompound entry = psList.getCompoundTagAt(i);
+                String uuidStr = entry.getString("uuid");
+                String sid = entry.getString("sid");
+                if (uuidStr != null && !uuidStr.isEmpty() && sid != null && !sid.isEmpty()) {
+                    try {
+                        playerSessionMap.put(UUID.fromString(uuidStr), sid);
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
         }
     }
 
@@ -75,6 +103,19 @@ public class SessionWorldData extends WorldSavedData {
             }
         }
         nbt.setTag("sessions", list);
+
+        // Persist player→session mapping
+        NBTTagList psList = new NBTTagList();
+        for (Map.Entry<UUID, String> entry : playerSessionMap.entrySet()) {
+            NBTTagCompound e = new NBTTagCompound();
+            e.setString(
+                "uuid",
+                entry.getKey()
+                    .toString());
+            e.setString("sid", entry.getValue());
+            psList.appendTag(e);
+        }
+        nbt.setTag("playerSessions", psList);
     }
 
     // -------------------------------------------------------------------------

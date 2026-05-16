@@ -51,8 +51,22 @@ public class ServerEventHandler {
 
     @SubscribeEvent
     public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.player instanceof EntityPlayerMP) {
-            PacketHandler.INSTANCE.sendTo(new PacketHandshake(), (EntityPlayerMP) event.player);
+        if (!(event.player instanceof EntityPlayerMP)) return;
+        EntityPlayerMP player = (EntityPlayerMP) event.player;
+        UUID playerUuid = player.getUniqueID();
+
+        // Announce the mod is present on this server
+        PacketHandler.INSTANCE.sendTo(new PacketHandshake(), player);
+
+        // Restore previous session if the player disconnected while in one
+        String lastSessionId = SessionWorldData.playerSessionMap.remove(playerUuid);
+        if (lastSessionId != null) {
+            SharedSession session = SharedSession.sessions.get(lastSessionId);
+            if (session != null) {
+                session.players.add(playerUuid);
+                PacketHandler.INSTANCE.sendTo(new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId), player);
+                SessionWorldData.save();
+            }
         }
     }
 
@@ -67,6 +81,9 @@ public class ServerEventHandler {
 
         for (SharedSession session : SharedSession.sessions.values()) {
             if (!session.hasPlayer(playerUuid)) continue;
+
+            // Remember which session this player was in so they can be restored on reconnect
+            SessionWorldData.playerSessionMap.put(playerUuid, session.sessionId);
 
             if (session.ownerUuid.equals(playerUuid)) {
                 // Try to transfer ownership to the next online member
@@ -83,26 +100,22 @@ public class ServerEventHandler {
                     }
                 }
 
+                session.players.remove(playerUuid);
                 if (newOwnerUuid != null) {
                     session.ownerUuid = newOwnerUuid;
                     session.ownerName = newOwnerName;
-                    session.players.remove(playerUuid);
-                    SessionWorldData.save();
                     EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
                     if (newOwnerPlayer != null) {
                         newOwnerPlayer.addChatMessage(
                             new ChatComponentText("§a[TalkWith]§r ")
                                 .appendSibling(new ChatComponentTranslation("talkwith.session.owner_transferred")));
                     }
-                } else {
-                    // No remaining online members — persist history in world data, remove from memory
-                    session.players.remove(playerUuid);
-                    SharedSession.sessions.remove(session.sessionId);
-                    SessionWorldData.save();
                 }
+                // Session stays in SharedSession.sessions — persisted for reconnect even with no members
             } else {
                 session.players.remove(playerUuid);
             }
+            SessionWorldData.save();
             break;
         }
     }

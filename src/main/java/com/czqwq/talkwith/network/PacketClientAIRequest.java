@@ -55,7 +55,7 @@ public class PacketClientAIRequest implements IMessage {
                     Config.model,
                     reply -> ClientProxy.scheduleOnMainThread(() -> {
                         ClientProxy.clientSession.addMessage("assistant", reply);
-                        TextUtils.addChatMessage("§b[AI]: §r" + reply);
+                        TextUtils.sendAIReply("§b[AI]: §r", reply);
                     }),
                     err -> ClientProxy.scheduleOnMainThread(() -> TextUtils.error(err)));
             });
