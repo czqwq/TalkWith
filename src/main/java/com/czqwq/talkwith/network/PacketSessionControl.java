@@ -131,7 +131,7 @@ public class PacketSessionControl implements IMessage {
                 if (joined != null) {
                     joined.players.remove(playerUuid);
                 }
-                ServerEventHandler.singleModeOverride.remove(playerUuid);
+                ServerEventHandler.clearPlayerState(playerUuid);
                 PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 player.addChatMessage(ok("talkwith.session.delete_ok"));
                 SessionWorldData.save();
@@ -209,6 +209,31 @@ public class PacketSessionControl implements IMessage {
                 return null;
             }
 
+            // takeover_toggle: toggle takeover mode (all chat intercepted, no ">" prefix needed)
+            if ("takeover_toggle".equals(msg.action)) {
+                if (ServerEventHandler.takeoverPlayers.contains(playerUuid)) {
+                    ServerEventHandler.takeoverPlayers.remove(playerUuid);
+                    player.addChatMessage(ok("talkwith.takeover.disabled"));
+                } else {
+                    ServerEventHandler.takeoverPlayers.add(playerUuid);
+                    String mode = ServerEventHandler.chatModes.getOrDefault(playerUuid, "ai");
+                    player.addChatMessage(okf("talkwith.takeover.enabled", mode));
+                }
+                return null;
+            }
+
+            // chat_mode: set chat mode (ai/group/public) for takeover routing
+            if ("chat_mode".equals(msg.action)) {
+                String mode = msg.target != null ? msg.target.toLowerCase() : "ai";
+                if (!mode.equals("group") && !mode.equals("public") && !mode.equals("ai")) {
+                    player.addChatMessage(err("talkwith.chat.usage"));
+                    return null;
+                }
+                ServerEventHandler.chatModes.put(playerUuid, mode);
+                player.addChatMessage(ok("talkwith.takeover.chat_mode." + mode));
+                return null;
+            }
+
             // ----------------------------------------------------------------
             // Actions that require an existing session
             // ----------------------------------------------------------------
@@ -237,7 +262,7 @@ public class PacketSessionControl implements IMessage {
                         SharedSession.sessions.remove(session.sessionId);
                         SessionWorldData.save();
                     }
-                    ServerEventHandler.singleModeOverride.remove(playerUuid);
+                    ServerEventHandler.clearPlayerState(playerUuid);
                     player.addChatMessage(ok("talkwith.session.left"));
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 }
@@ -271,7 +296,7 @@ public class PacketSessionControl implements IMessage {
                     } else {
                         session.players.remove(playerUuid);
                     }
-                    ServerEventHandler.singleModeOverride.remove(playerUuid);
+                    ServerEventHandler.clearPlayerState(playerUuid);
                     player.addChatMessage(ok("talkwith.session.left"));
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
                 }
@@ -284,7 +309,7 @@ public class PacketSessionControl implements IMessage {
                         SharedSession.sessions.remove(session.sessionId);
                         SessionWorldData.save();
                         for (UUID uuid : session.players) {
-                            ServerEventHandler.singleModeOverride.remove(uuid);
+                            ServerEventHandler.clearPlayerState(uuid);
                             EntityPlayerMP member = getPlayerByUUID(server, uuid);
                             if (member != null) {
                                 member.addChatMessage(err("talkwith.session.closed"));
@@ -367,7 +392,7 @@ public class PacketSessionControl implements IMessage {
                         .func_152612_a(msg.target);
                     if (targetPlayer != null) {
                         session.players.remove(targetPlayer.getUniqueID());
-                        ServerEventHandler.singleModeOverride.remove(targetPlayer.getUniqueID());
+                        ServerEventHandler.clearPlayerState(targetPlayer.getUniqueID());
                         targetPlayer.addChatMessage(err("talkwith.session.kicked"));
                         PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), targetPlayer);
                         player.addChatMessage(okf("talkwith.session.kicked_player", msg.target));
@@ -394,7 +419,7 @@ public class PacketSessionControl implements IMessage {
                     SharedSession.sessions.remove(session.sessionId);
                     SessionWorldData.save();
                     for (UUID uuid : session.players) {
-                        ServerEventHandler.singleModeOverride.remove(uuid);
+                        ServerEventHandler.clearPlayerState(uuid);
                         EntityPlayerMP member = getPlayerByUUID(server, uuid);
                         if (member != null) {
                             member.addChatMessage(err("talkwith.session.closed"));

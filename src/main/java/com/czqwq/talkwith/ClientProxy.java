@@ -22,6 +22,13 @@ public class ClientProxy extends CommonProxy {
     public static String currentSessionId = null;
     /** True when the player is in a session but has used {@code /talkwith switch single}. */
     public static boolean isSingleOverride = false;
+    /** True when takeover mode is active (all chat intercepted, no {@code >} prefix needed). */
+    public static boolean isTakeover = false;
+    /**
+     * Chat mode while in takeover: {@code "ai"} (default), {@code "group"}, or {@code "public"}.
+     * Only meaningful when {@link #isTakeover} is true.
+     */
+    public static String takeoverChatMode = "ai";
 
     private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
@@ -66,5 +73,7 @@ public class ClientProxy extends CommonProxy {
         serverHasMod = false;
         currentSessionId = null;
         isSingleOverride = false;
+        isTakeover = false;
+        takeoverChatMode = "ai";
     }
 }

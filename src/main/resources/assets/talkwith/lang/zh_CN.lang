@@ -1,4 +1,4 @@
-talkwith.command.usage=用法: /talkwith <config|status|history|session|switch>
+talkwith.command.usage=用法: /talkwith <config|status|history|session|switch|takeover|chat>
 talkwith.config.saved=配置已保存。
 talkwith.config.reloaded=配置已重载。
 talkwith.api.pinging=正在测试 API 连接...
@@ -85,3 +85,12 @@ talkwith.switch.not_in_session=你当前没有加入任何会话。请先使用 
 talkwith.switch.single.ok=已切换到 §e单人§r 模式。你的">"消息将发送给本地 AI。
 talkwith.switch.multi.ok=已切换到 §a多人§r 模式。你的">"消息将发送给共享会话 AI。
 talkwith.history.usage=用法：/talkwith history <clear|show>
+# 接管模式
+talkwith.takeover.enabled=接管模式已 §a开启§r。聊天模式：§e%s§r。使用 /talkwith chat <group|public|ai> 切换模式。
+talkwith.takeover.disabled=接管模式已 §c关闭§r。恢复正常聊天。
+talkwith.takeover.group.no_session=你当前没有加入任何会话，无法使用小队聊天。
+talkwith.takeover.chat_mode.group=聊天模式：§e[小队]§r — 消息仅对会话成员可见，AI 不介入。
+talkwith.takeover.chat_mode.public=聊天模式：§a[公共]§r — 消息对所有人可见，AI 不介入。
+talkwith.takeover.chat_mode.ai=聊天模式：§b[AI]§r — 每条消息都触发 AI，会话成员均可看到回复。
+talkwith.chat.usage=用法：/talkwith chat <group|public|ai>
+talkwith.status.takeover=[TalkWith] 接管模式：§a开启§r | 聊天模式：§e%s§r

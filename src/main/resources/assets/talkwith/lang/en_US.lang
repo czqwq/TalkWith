@@ -1,4 +1,4 @@
-talkwith.command.usage=Usage: /talkwith <config|status|history|session|switch>
+talkwith.command.usage=Usage: /talkwith <config|status|history|session|switch|takeover|chat>
 talkwith.config.saved=Configuration saved.
 talkwith.config.reloaded=Configuration reloaded.
 talkwith.api.pinging=Pinging API...
@@ -85,3 +85,12 @@ talkwith.switch.not_in_session=You are not in any session. Join one first with /
 talkwith.switch.single.ok=Switched to §eSingle§r mode. Your ">" messages go to your local AI.
 talkwith.switch.multi.ok=Switched to §aMulti§r mode. Your ">" messages go to the shared session AI.
 talkwith.history.usage=Usage: /talkwith history <clear|show>
+# Takeover mode
+talkwith.takeover.enabled=Takeover mode §aON§r. Chat mode: §e%s§r. Use /talkwith chat <group|public|ai> to switch.
+talkwith.takeover.disabled=Takeover mode §cOFF§r. Normal chat restored.
+talkwith.takeover.group.no_session=You are not in any session. Cannot use group chat.
+talkwith.takeover.chat_mode.group=Chat mode: §e[Group]§r — messages visible to session members only, AI not involved.
+talkwith.takeover.chat_mode.public=Chat mode: §a[Public]§r — messages visible to all players, AI not involved.
+talkwith.takeover.chat_mode.ai=Chat mode: §b[AI]§r — every message triggers AI; all session members can see replies.
+talkwith.chat.usage=Usage: /talkwith chat <group|public|ai>
+talkwith.status.takeover=[TalkWith] Takeover: §aON§r | Chat mode: §e%s§r

@@ -77,6 +77,12 @@ public class TalkWithCommand extends CommandBase {
                             Config.model,
                             Config.clientPromptFile));
                 }
+                // Show takeover state if active
+                if (ClientProxy.isTakeover) {
+                    TextUtils.info(
+                        StatCollector
+                            .translateToLocalFormatted("talkwith.status.takeover", ClientProxy.takeoverChatMode));
+                }
             }
             case "history" -> {
                 if (args.length < 2) {
@@ -127,6 +133,32 @@ public class TalkWithCommand extends CommandBase {
                 } else {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.switch.usage"));
                 }
+            }
+            case "takeover" -> {
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
+                    return;
+                }
+                // Optimistically toggle client state then confirm with server
+                ClientProxy.isTakeover = !ClientProxy.isTakeover;
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("takeover_toggle", ""));
+            }
+            case "chat" -> {
+                if (!serverFeatureAvailable()) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
+                    return;
+                }
+                if (args.length < 2) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.chat.usage"));
+                    return;
+                }
+                String mode = args[1].toLowerCase();
+                if (!mode.equals("group") && !mode.equals("public") && !mode.equals("ai")) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.chat.usage"));
+                    return;
+                }
+                ClientProxy.takeoverChatMode = mode;
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("chat_mode", mode));
             }
             default -> TextUtils
                 .error(StatCollector.translateToLocalFormatted("talkwith.unknown_sub", getCommandUsage(sender)));
@@ -364,7 +396,15 @@ public class TalkWithCommand extends CommandBase {
     @SuppressWarnings("unchecked")
     public List addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "config", "status", "history", "session", "switch");
+            return getListOfStringsMatchingLastWord(
+                args,
+                "config",
+                "status",
+                "history",
+                "session",
+                "switch",
+                "takeover",
+                "chat");
         }
         if (args.length == 2) {
             switch (args[0].toLowerCase()) {
@@ -390,6 +430,8 @@ public class TalkWithCommand extends CommandBase {
                         "history");
                 case "switch":
                     return getListOfStringsMatchingLastWord(args, "single", "multi");
+                case "chat":
+                    return getListOfStringsMatchingLastWord(args, "group", "public", "ai");
             }
         }
         if (args.length == 3) {

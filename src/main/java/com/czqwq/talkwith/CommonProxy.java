@@ -7,6 +7,7 @@ import net.minecraftforge.common.MinecraftForge;
 import com.czqwq.talkwith.ai.SessionPersistence;
 import com.czqwq.talkwith.network.PacketHandler;
 
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
@@ -33,6 +34,13 @@ public class CommonProxy {
     public void serverStarting(FMLServerStartingEvent event) {
         // Session restoration happens in ServerEventHandler.onWorldLoad (WorldEvent.Load for dim 0).
         // SessionPersistence.init() is still called in preInit for the migration fallback path.
-        MinecraftForge.EVENT_BUS.register(new ServerEventHandler());
+        ServerEventHandler handler = new ServerEventHandler();
+        // WorldEvent / ServerChatEvent live on MinecraftForge.EVENT_BUS.
+        MinecraftForge.EVENT_BUS.register(handler);
+        // PlayerLoggedIn/Out live on the FML game-event bus — must register here too or
+        // logout/login handlers are never called (causing session state leaks and missing handshakes).
+        FMLCommonHandler.instance()
+            .bus()
+            .register(handler);
     }
 }
