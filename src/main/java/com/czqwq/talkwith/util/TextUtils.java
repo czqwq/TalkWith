@@ -26,8 +26,65 @@ public class TextUtils {
         }
     }
 
+    /**
+     * Computes the approximate visual width of a string for Minecraft's chat box.
+     * <ul>
+     * <li>§-format codes (two-char sequences) count as 0 width.</li>
+     * <li>CJK Unified Ideographs, Hangul, fullwidth forms, etc. count as 2 units.</li>
+     * <li>All other characters count as 1 unit.</li>
+     * </ul>
+     * One "unit" ≈ 6 GUI pixels (the average ASCII glyph width).
+     */
+    static int visualWidth(String s) {
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '§' && i + 1 < s.length()) {
+                i++; // skip the format-code character
+                continue;
+            }
+            // CJK Unified Ideographs, Hangul, fullwidth/wide Latin, etc.
+            w += isWideChar(c) ? 2 : 1;
+        }
+        return w;
+    }
+
+    private static boolean isWideChar(char c) {
+        return (c >= 0x1100 && c <= 0x115F) // Hangul Jamo
+            || (c >= 0x2E80 && c <= 0x303F) // CJK Radicals / Kangxi
+            || (c >= 0x3040 && c <= 0x33FF) // Japanese kana + misc CJK
+            || (c >= 0x3400 && c <= 0x4DBF) // CJK Extension A
+            || (c >= 0x4E00 && c <= 0x9FFF) // CJK Unified Ideographs
+            || (c >= 0xA000 && c <= 0xA4CF) // Yi
+            || (c >= 0xAC00 && c <= 0xD7AF) // Hangul Syllables
+            || (c >= 0xF900 && c <= 0xFAFF) // CJK Compatibility Ideographs
+            || (c >= 0xFE10 && c <= 0xFE1F) // Vertical forms
+            || (c >= 0xFE30 && c <= 0xFE4F) // CJK Compatibility Forms
+            || (c >= 0xFF00 && c <= 0xFF60) // Fullwidth Latin / Halfwidth Katakana
+            || (c >= 0xFFE0 && c <= 0xFFE6); // Fullwidth signs
+    }
+
+    /**
+     * Sends an informational message to chat.
+     * If the formatted line is wider than the chat box (e.g. a Chinese status line
+     * that uses double-width CJK glyphs), the message is split at " | " separators
+     * so each piece fits on its own line without Minecraft having to wrap mid-§code.
+     */
     public static void info(String msg) {
-        addChatMessage(PREFIX + msg);
+        String full = PREFIX + msg;
+        if (visualWidth(full) <= MAX_VISUAL_WIDTH) {
+            addChatMessage(full);
+            return;
+        }
+        // Split at pipe separators (status messages use " | " as field separators)
+        String[] parts = msg.split(" \\| ");
+        if (parts.length <= 1) {
+            addChatMessage(full); // no separators found — send as-is
+            return;
+        }
+        for (String part : parts) {
+            addChatMessage(PREFIX + part);
+        }
     }
 
     public static void error(String msg) {
@@ -71,9 +128,11 @@ public class TextUtils {
         for (String line : parts) {
             if (line.isEmpty()) continue; // skip blank lines
 
-            // Chunk excessively long single lines at word boundaries
-            while (line.length() > MAX_LINE_LENGTH) {
-                int cut = MAX_LINE_LENGTH;
+            // Chunk excessively long lines using visual width so CJK double-width
+            // characters are counted correctly (each CJK char = 2 width units).
+            while (visualWidth(line) > MAX_VISUAL_WIDTH) {
+                int cut = findVisualCut(line, MAX_VISUAL_WIDTH);
+                // Prefer to break at a space so we don't cut mid-word
                 int space = line.lastIndexOf(' ', cut);
                 if (space > cut / 2) cut = space;
                 String chunk = line.substring(0, cut)
@@ -91,5 +150,23 @@ public class TextUtils {
                 firstMsg = false;
             }
         }
+    }
+
+    /**
+     * Returns the character index at which the cumulative visual width first
+     * reaches (or would exceed) {@code maxWidth}.
+     */
+    private static int findVisualCut(String s, int maxWidth) {
+        int w = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '§' && i + 1 < s.length()) {
+                i++;
+                continue;
+            }
+            w += isWideChar(c) ? 2 : 1;
+            if (w > maxWidth) return i;
+        }
+        return s.length();
     }
 }

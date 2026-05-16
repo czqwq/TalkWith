@@ -69,9 +69,9 @@ public class AIClient {
                 }
 
                 JsonObject responseJson = GSON.fromJson(responseText, JsonObject.class);
-                if (responseJson == null
-                    || !responseJson.has("choices")
-                    || responseJson.getAsJsonArray("choices").size() == 0) {
+                if (responseJson == null || !responseJson.has("choices")
+                    || responseJson.getAsJsonArray("choices")
+                        .size() == 0) {
                     onError.accept("Empty or malformed response: " + responseText);
                     return;
                 }
@@ -83,7 +83,8 @@ public class AIClient {
                     onError.accept("Missing message.content in response");
                     return;
                 }
-                String content = message.get("content").getAsString();
+                String content = message.get("content")
+                    .getAsString();
                 onSuccess.accept(content);
             } catch (Exception e) {
                 onError.accept(

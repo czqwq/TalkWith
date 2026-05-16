@@ -127,31 +127,6 @@ public class PacketSessionControl implements IMessage {
                 return null;
             }
 
-            if ("client_create".equals(msg.action)) {
-                SharedSession owned = getOwnedSession(playerUuid);
-                if (owned != null) {
-                    SharedSession.sessions.remove(owned.sessionId);
-                    for (UUID uuid : owned.players) {
-                        if (!uuid.equals(playerUuid)) {
-                            EntityPlayerMP member = getPlayerByUUID(server, uuid);
-                            if (member != null) {
-                                member.addChatMessage(err("talkwith.session.closed"));
-                                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
-                            }
-                        }
-                    }
-                }
-                SharedSession joined = getPlayerSession(playerUuid);
-                if (joined != null) {
-                    joined.players.remove(playerUuid);
-                }
-                ServerEventHandler.clearPlayerState(playerUuid);
-                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
-                player.addChatMessage(ok("talkwith.session.delete_ok"));
-                SessionWorldData.save();
-                return null;
-            }
-
             if ("list".equals(msg.action)) {
                 if (SharedSession.sessions.isEmpty()) {
                     player.addChatMessage(ok("talkwith.session.list_empty"));
@@ -192,12 +167,13 @@ public class PacketSessionControl implements IMessage {
                     return null;
                 }
                 boolean isOwner = s.ownerUuid.equals(playerUuid);
-                boolean isMulti = s.players.size() > 1;
                 boolean isSingleOverride = ServerEventHandler.singleModeOverride.contains(playerUuid);
                 String nameOrId = s.sessionName.isEmpty() ? s.sessionId : s.sessionName;
                 String roleKey = isOwner ? "talkwith.status.role.owner" : "talkwith.status.role.member";
+                // Being in a session = multi mode by default; single_override means the player
+                // explicitly switched back to local AI with /talkwith switch single.
                 String modeKey = isSingleOverride ? "talkwith.status.mode.single_override"
-                    : (isMulti ? "talkwith.status.mode.multi" : "talkwith.status.mode.single");
+                    : "talkwith.status.mode.multi";
                 player.addChatMessage(
                     okf(
                         "talkwith.status.session_detail",

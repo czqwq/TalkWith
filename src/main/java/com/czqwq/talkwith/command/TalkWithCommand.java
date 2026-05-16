@@ -318,11 +318,6 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
                 }
             }
-            case "client" -> {
-                ClientProxy.currentSessionId = null;
-                ClientProxy.isSingleOverride = false;
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("client_create", ""));
-            }
             case "delete" -> {
                 ClientProxy.currentSessionId = null;
                 ClientProxy.isSingleOverride = false;
@@ -429,7 +424,6 @@ public class TalkWithCommand extends CommandBase {
                     return getListOfStringsMatchingLastWord(
                         args,
                         "server",
-                        "client",
                         "delete",
                         "join",
                         "leave",
