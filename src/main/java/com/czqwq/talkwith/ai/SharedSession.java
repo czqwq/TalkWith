@@ -16,6 +16,10 @@ public class SharedSession {
     private static final int MAX_RECENT = 5;
 
     public final String sessionId;
+    /** Optional human-readable name for the session (used for join-by-name). */
+    public volatile String sessionName = "";
+    /** Filename (in config/talkwith/) of the JSON prompt file used for this session. */
+    public volatile String sessionPromptFile = "system_prompt.json";
     /** Mutable — can be updated when ownership is transferred. */
     public volatile UUID ownerUuid;
     public volatile String ownerName;
