@@ -242,7 +242,7 @@ public class TalkWithCommand extends CommandBase {
                 }
                 String filename = Config.sanitizePromptFilename(args[3]);
                 // Auto-create the file with default content if it doesn't exist
-                Config.systemPrompt = Config.loadPromptFromFile(filename);
+                Config.loadPromptFromFile(filename);
                 Config.clientPromptFile = filename;
                 Config.save();
                 TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.config.prompt_file.set", filename));

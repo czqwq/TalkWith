@@ -237,8 +237,8 @@ public class ServerEventHandler {
     }
 
     /**
-     * Broadcasts a message only to the player's current session members (no AI).
-     * Used in takeover {@code group} mode.
+     * Broadcasts a message only to the player's current session members (no AI involvement).
+     * Used in takeover {@code group} mode so the conversation stays private to the group.
      */
     private void routeToGroup(EntityPlayerMP player, UUID playerUuid, String playerName, String text) {
         SharedSession foundSession = null;
