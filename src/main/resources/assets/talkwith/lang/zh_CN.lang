@@ -69,19 +69,19 @@ talkwith.config.prompts_list_header=可用提示词文件（%s 个）：
 talkwith.config.prompts_list_empty=config/talkwith/ 目录中没有找到提示词 JSON 文件。
 talkwith.config.multi.view_hint=使用 /talkwith status 查看当前会话设置。
 # 状态显示
-talkwith.status.client=[TalkWith] 模式：§b单人§r | 地址：%s | 模型：%s | 提示词：§e%s§r
-talkwith.status.session_basic=[TalkWith] 模式：§a服务端会话§r | ID：%s
-talkwith.status.session_detail=[TalkWith] 模式：%s（%s）| 会话：§e%s§r | 成员数：%s | 提示词：§e%s§r
-talkwith.status.mode.single=§a单人§r
-talkwith.status.mode.multi=§a多人§r
-talkwith.status.mode.single_override=§e单人覆盖§r
+talkwith.status.client=模式：§b单人模式§r | 地址：%s | 模型：%s | 提示词：§e%s§r
+talkwith.status.session_basic=模式：§a服务端会话§r | ID：%s
+talkwith.status.session_detail=模式：%s（%s）| 会话：§e%s§r | 成员数：%s | 提示词：§e%s§r
+talkwith.status.mode.single=§a单人模式§r
+talkwith.status.mode.multi=§a多人模式§r
+talkwith.status.mode.single_override=§e单人覆盖模式§r
 talkwith.status.role.owner=§a所有者§r
 talkwith.status.role.member=§e成员§r
 # 切换
 talkwith.switch.usage=用法：/talkwith switch <single|multi>
 talkwith.switch.not_in_session=你当前没有加入任何会话。请先使用 /talkwith session join 加入。
-talkwith.switch.single.ok=已切换到 §e单人§r 模式。你的">"消息将发送给本地 AI。
-talkwith.switch.multi.ok=已切换到 §a多人§r 模式。你的">"消息将发送给共享会话 AI。
+talkwith.switch.single.ok=已切换到 §e单人模式§r。你的">"消息将发送给本地 AI。
+talkwith.switch.multi.ok=已切换到 §a多人模式§r。你的">"消息将发送给共享会话 AI。
 talkwith.history.usage=用法：/talkwith history <clear|show>
 # 接管模式
 talkwith.takeover.enabled=接管模式已 §a开启§r。聊天模式：§e%s§r。使用 /talkwith chat <group|public|ai> 切换模式。
@@ -91,4 +91,9 @@ talkwith.takeover.chat_mode.group=聊天模式：§e[小队]§r — 消息仅对
 talkwith.takeover.chat_mode.public=聊天模式：§a[公共]§r — 消息对所有人可见，AI 不介入。
 talkwith.takeover.chat_mode.ai=聊天模式：§b[AI]§r — 每条消息都触发 AI，会话成员均可看到回复。
 talkwith.chat.usage=用法：/talkwith chat <group|public|ai>
-talkwith.status.takeover=[TalkWith] 接管模式：§a开启§r | 聊天模式：§e%s§r
+talkwith.status.takeover=接管模式：§a开启§r | 聊天模式：§e%s§r
+# 聊天显示标签
+talkwith.chat.ai_prefix=§b[AI]: §r
+talkwith.chat.error_prefix=§c[错误]: §r
+talkwith.session.click_to_join=§b[点击加入]
+talkwith.chat.group_format=§7[小队]§r %s: %s

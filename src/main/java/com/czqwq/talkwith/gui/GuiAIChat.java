@@ -204,11 +204,11 @@ public class GuiAIChat extends GuiScreen {
                 ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
                 reply -> ClientProxy.scheduleOnMainThread(() -> {
                     ClientProxy.clientSession.addMessage("assistant", reply);
-                    lines.add("§b[AI]§r " + reply);
+                    lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
                     isThinking = false;
                 }),
                 err -> ClientProxy.scheduleOnMainThread(() -> {
-                    lines.add("§c[Error]§r " + err);
+                    lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
                     isThinking = false;
                 }));
         }

@@ -68,6 +68,22 @@ public class SessionWorldData extends WorldSavedData {
                 if (session != null) {
                     SharedSession.sessions.put(session.sessionId, session);
                     loaded++;
+                    // Populate playerSessionMap from stored player UUIDs.
+                    // This guarantees reliable restore in single-player where the final
+                    // world save may occur before onPlayerLogout fires (which would normally
+                    // add entries to playerSessionMap via markDirty). By reading the player
+                    // list that was saved alongside the session data, we can always restore
+                    // the player→session association regardless of save/logout ordering.
+                    NBTTagList sessionPlayers = entry.getTagList("players", NBT_COMPOUND);
+                    for (int j = 0; j < sessionPlayers.tagCount(); j++) {
+                        String uuidStr = sessionPlayers.getCompoundTagAt(j)
+                            .getString("uuid");
+                        if (uuidStr != null && !uuidStr.isEmpty()) {
+                            try {
+                                playerSessionMap.put(UUID.fromString(uuidStr), session.sessionId);
+                            } catch (IllegalArgumentException ignored) {}
+                        }
+                    }
                 }
             }
             if (loaded > 0) {
@@ -99,6 +115,15 @@ public class SessionWorldData extends WorldSavedData {
             if (json != null) {
                 NBTTagCompound entry = new NBTTagCompound();
                 entry.setString("data", json);
+                // Persist the current player set so restore is reliable even in
+                // single-player where onPlayerLogout may fire after the last world save.
+                NBTTagList sessionPlayers = new NBTTagList();
+                for (UUID pUuid : session.players) {
+                    NBTTagCompound pe = new NBTTagCompound();
+                    pe.setString("uuid", pUuid.toString());
+                    sessionPlayers.appendTag(pe);
+                }
+                entry.setTag("players", sessionPlayers);
                 list.appendTag(entry);
             }
         }

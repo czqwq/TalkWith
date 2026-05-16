@@ -69,19 +69,19 @@ talkwith.config.prompts_list_header=Available prompt files (%s):
 talkwith.config.prompts_list_empty=No prompt JSON files found in config/talkwith/.
 talkwith.config.multi.view_hint=Use /talkwith status to view current session settings.
 # Status
-talkwith.status.client=[TalkWith] Mode: §bSingle§r | URL: %s | Model: %s | Prompt: §e%s§r
-talkwith.status.session_basic=[TalkWith] Mode: §aServer Session§r | ID: %s
-talkwith.status.session_detail=[TalkWith] Mode: %s (%s) | Session: §e%s§r | Members: %s | Prompt: §e%s§r
-talkwith.status.mode.single=§aSingle-player§r
-talkwith.status.mode.multi=§aMulti-player§r
-talkwith.status.mode.single_override=§eSingle-override§r
+talkwith.status.client=Mode: §bSingle Mode§r | URL: %s | Model: %s | Prompt: §e%s§r
+talkwith.status.session_basic=Mode: §aServer Session§r | ID: %s
+talkwith.status.session_detail=Mode: %s (%s) | Session: §e%s§r | Members: %s | Prompt: §e%s§r
+talkwith.status.mode.single=§aSingle Mode§r
+talkwith.status.mode.multi=§aMulti-player Mode§r
+talkwith.status.mode.single_override=§eSingle Override Mode§r
 talkwith.status.role.owner=§aowner§r
 talkwith.status.role.member=§emember§r
 # Switch
 talkwith.switch.usage=Usage: /talkwith switch <single|multi>
 talkwith.switch.not_in_session=You are not in any session. Join one first with /talkwith session join.
-talkwith.switch.single.ok=Switched to §eSingle§r mode. Your ">" messages go to your local AI.
-talkwith.switch.multi.ok=Switched to §aMulti§r mode. Your ">" messages go to the shared session AI.
+talkwith.switch.single.ok=Switched to §eSingle Mode§r. Your ">" messages go to your local AI.
+talkwith.switch.multi.ok=Switched to §aMulti-player Mode§r. Your ">" messages go to the shared session AI.
 talkwith.history.usage=Usage: /talkwith history <clear|show>
 # Takeover mode
 talkwith.takeover.enabled=Takeover mode §aON§r. Chat mode: §e%s§r. Use /talkwith chat <group|public|ai> to switch.
@@ -91,4 +91,9 @@ talkwith.takeover.chat_mode.group=Chat mode: §e[Group]§r — messages visible 
 talkwith.takeover.chat_mode.public=Chat mode: §a[Public]§r — messages visible to all players, AI not involved.
 talkwith.takeover.chat_mode.ai=Chat mode: §b[AI]§r — every message triggers AI; all session members can see replies.
 talkwith.chat.usage=Usage: /talkwith chat <group|public|ai>
-talkwith.status.takeover=[TalkWith] Takeover: §aON§r | Chat mode: §e%s§r
+talkwith.status.takeover=Takeover: §aON§r | Chat mode: §e%s§r
+# Chat display labels
+talkwith.chat.ai_prefix=§b[AI]: §r
+talkwith.chat.error_prefix=§c[Error]: §r
+talkwith.session.click_to_join=§b[Click to join]
+talkwith.chat.group_format=§7[Group]§r %s: %s

@@ -1,5 +1,7 @@
 package com.czqwq.talkwith.network;
 
+import net.minecraft.util.StatCollector;
+
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.util.TextUtils;
 
@@ -43,7 +45,7 @@ public class PacketSessionBroadcast implements IMessage {
         public IMessage onMessage(PacketSessionBroadcast msg, MessageContext ctx) {
             ClientProxy.scheduleOnMainThread(() -> {
                 TextUtils.addChatMessage("§e[" + msg.playerName + "]: §f" + msg.playerMsg);
-                TextUtils.sendAIReply("§b[AI]: §r", msg.aiReply);
+                TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), msg.aiReply);
             });
             return null;
         }

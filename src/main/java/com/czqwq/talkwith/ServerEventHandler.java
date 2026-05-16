@@ -10,6 +10,7 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.IChatComponent;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.world.WorldEvent;
 
@@ -268,7 +269,7 @@ public class ServerEventHandler {
             return;
         }
         MinecraftServer server = MinecraftServer.getServer();
-        ChatComponentText chatMsg = new ChatComponentText("§7[Group] §r" + playerName + ": " + text);
+        IChatComponent chatMsg = new ChatComponentTranslation("talkwith.chat.group_format", playerName, text);
         for (UUID uuid : foundSession.players) {
             EntityPlayerMP member = getPlayerByUUID(server, uuid);
             if (member != null) member.addChatMessage(chatMsg);

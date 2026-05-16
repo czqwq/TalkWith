@@ -47,7 +47,7 @@ public class PacketShareInvite implements IMessage {
                 IChatComponent base = new ChatComponentText("§a[TalkWith]§r ")
                     .appendSibling(new ChatComponentTranslation("talkwith.session.invited", msg.senderName))
                     .appendText(" ");
-                IChatComponent link = new ChatComponentText("§b[Click to join]");
+                IChatComponent link = new ChatComponentTranslation("talkwith.session.click_to_join");
                 link.setChatStyle(
                     new ChatStyle().setChatClickEvent(
                         new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/talkwith session join " + msg.sessionId)));

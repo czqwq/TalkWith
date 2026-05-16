@@ -1,5 +1,7 @@
 package com.czqwq.talkwith.network;
 
+import net.minecraft.util.StatCollector;
+
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.AIClient;
@@ -55,7 +57,7 @@ public class PacketClientAIRequest implements IMessage {
                     Config.model,
                     reply -> ClientProxy.scheduleOnMainThread(() -> {
                         ClientProxy.clientSession.addMessage("assistant", reply);
-                        TextUtils.sendAIReply("§b[AI]: §r", reply);
+                        TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), reply);
                     }),
                     err -> ClientProxy.scheduleOnMainThread(() -> TextUtils.error(err)));
             });
