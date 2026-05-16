@@ -38,6 +38,14 @@ public class TalkWithCommand extends CommandBase {
             .isIntegratedServerRunning();
     }
 
+    /**
+     * Returns {@code true} when the player is currently in a server session in multi mode.
+     * Used by {@link #handleConfigKey} to route config changes to the session vs. local Config.
+     */
+    private static boolean isMultiMode() {
+        return ClientProxy.currentSessionId != null && !ClientProxy.isSingleOverride && serverFeatureAvailable();
+    }
+
     // -------------------------------------------------------------------------
     // Main dispatch
     // -------------------------------------------------------------------------
@@ -191,9 +199,7 @@ public class TalkWithCommand extends CommandBase {
      * modifies the player's own local (single-mode) settings stored in {@link Config}.
      */
     private void handleConfigKey(ICommandSender sender, String[] args) {
-        // Multi mode: in a session AND not in single-override AND server supports it
-        boolean isMulti = ClientProxy.currentSessionId != null && !ClientProxy.isSingleOverride
-            && serverFeatureAvailable();
+        boolean isMulti = isMultiMode();
 
         switch (args[1].toLowerCase()) {
             case "baseurl" -> {

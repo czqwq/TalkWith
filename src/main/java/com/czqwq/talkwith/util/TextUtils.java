@@ -11,6 +11,9 @@ public class TextUtils {
     /** Safety limit for a single chat segment — MC wraps visually, but very long strings can cause issues. */
     private static final int MAX_LINE_LENGTH = 240;
 
+    /** First printable ASCII character — used to filter raw control characters from AI output. */
+    private static final char MIN_PRINTABLE_CHAR = 0x20;
+
     public static void addChatMessage(String msg) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.thePlayer != null) {
@@ -51,7 +54,7 @@ public class TextUtils {
         StringBuilder sb = new StringBuilder(normalized.length());
         for (int i = 0; i < normalized.length(); i++) {
             char c = normalized.charAt(i);
-            if (c == '\n' || c >= 0x20) {
+            if (c == '\n' || c >= MIN_PRINTABLE_CHAR) {
                 sb.append(c);
             }
         }
