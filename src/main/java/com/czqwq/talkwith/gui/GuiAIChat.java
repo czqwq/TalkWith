@@ -201,7 +201,7 @@ public class GuiAIChat extends GuiScreen {
         } else {
             ClientProxy.clientSession.addMessage("user", text);
             AIClient.sendAsync(
-                ClientProxy.clientSession.getMessages(Config.systemPrompt),
+                ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
                 reply -> ClientProxy.scheduleOnMainThread(() -> {
                     ClientProxy.clientSession.addMessage("assistant", reply);
                     lines.add("§b[AI]§r " + reply);

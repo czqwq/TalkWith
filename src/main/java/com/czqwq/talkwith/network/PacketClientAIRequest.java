@@ -49,7 +49,7 @@ public class PacketClientAIRequest implements IMessage {
                 TextUtils.addChatMessage("§e[" + pName + "]: §f" + pMsg);
                 ClientProxy.clientSession.addMessage("user", pMsg);
                 AIClient.sendAsync(
-                    ClientProxy.clientSession.getMessages(Config.systemPrompt),
+                    ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
                     Config.baseUrl,
                     Config.apiKey,
                     Config.model,
