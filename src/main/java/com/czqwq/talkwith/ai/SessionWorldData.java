@@ -68,12 +68,8 @@ public class SessionWorldData extends WorldSavedData {
                 if (session != null) {
                     SharedSession.sessions.put(session.sessionId, session);
                     loaded++;
-                    // Populate playerSessionMap from stored player UUIDs.
-                    // This guarantees reliable restore in single-player where the final
-                    // world save may occur before onPlayerLogout fires (which would normally
-                    // add entries to playerSessionMap via markDirty). By reading the player
-                    // list that was saved alongside the session data, we can always restore
-                    // the player→session association regardless of save/logout ordering.
+                    // Populate playerSessionMap from stored player UUIDs to handle
+                    // single-player saves that occur before onPlayerLogout fires.
                     NBTTagList sessionPlayers = entry.getTagList("players", NBT_COMPOUND);
                     for (int j = 0; j < sessionPlayers.tagCount(); j++) {
                         String uuidStr = sessionPlayers.getCompoundTagAt(j)
@@ -115,8 +111,8 @@ public class SessionWorldData extends WorldSavedData {
             if (json != null) {
                 NBTTagCompound entry = new NBTTagCompound();
                 entry.setString("data", json);
-                // Persist the current player set so restore is reliable even in
-                // single-player where onPlayerLogout may fire after the last world save.
+                // Persist the current player set alongside the session JSON so that
+                // playerSessionMap can be rebuilt on load (see readFromNBT).
                 NBTTagList sessionPlayers = new NBTTagList();
                 for (UUID pUuid : session.players) {
                     NBTTagCompound pe = new NBTTagCompound();
