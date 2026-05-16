@@ -17,7 +17,7 @@ import com.google.gson.JsonObject;
 
 public class Config {
 
-    public static String baseUrl = "https://api.openai.com";
+    private static final Gson GSON = new Gson();
     public static String apiKey = "";
     public static String model = "gpt-3.5-turbo";
     /**
@@ -120,7 +120,7 @@ public class Config {
         }
         try {
             String raw = readFileUtf8(file);
-            JsonObject obj = new Gson().fromJson(raw, JsonObject.class);
+            JsonObject obj = GSON.fromJson(raw, JsonObject.class);
             return obj.get("prompt")
                 .getAsString();
         } catch (Exception e) {
@@ -165,12 +165,10 @@ public class Config {
         try {
             JsonObject obj = new JsonObject();
             obj.addProperty("prompt", prompt);
-            String json = new Gson().toJson(obj);
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
-            try {
+            String json = GSON.toJson(obj);
+            try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(file), "UTF-8"))) {
                 writer.write(json);
-            } finally {
-                writer.close();
             }
         } catch (Exception e) {
             TalkWith.LOG.error("[TalkWith] Failed to write prompt file: " + file.getName(), e);
@@ -194,8 +192,8 @@ public class Config {
 
     public static String readFileUtf8(File file) throws Exception {
         StringBuilder sb = new StringBuilder();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
-        try {
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
             String line;
             boolean first = true;
             while ((line = reader.readLine()) != null) {
@@ -203,8 +201,6 @@ public class Config {
                 sb.append(line);
                 first = false;
             }
-        } finally {
-            reader.close();
         }
         return sb.toString();
     }

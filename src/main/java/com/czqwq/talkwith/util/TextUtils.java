@@ -8,8 +8,13 @@ public class TextUtils {
     public static final String PREFIX = "§a[TalkWith]§r ";
     public static final String PREFIX_ERROR = "§c[TalkWith]§r ";
 
-    /** Safety limit for a single chat segment — MC wraps visually, but very long strings can cause issues. */
-    private static final int MAX_LINE_LENGTH = 240;
+    /**
+     * Approximate visual-width limit for a single chat line.
+     * Minecraft's default chat box is ~320 "GUI pixels" wide;
+     * ASCII chars average ~6px, so 53 ASCII units ≈ 318px.
+     * CJK/full-width chars are double-width and count as 2 units here.
+     */
+    private static final int MAX_VISUAL_WIDTH = 53;
 
     /** First printable ASCII character — used to filter raw control characters from AI output. */
     private static final char MIN_PRINTABLE_CHAR = 0x20;

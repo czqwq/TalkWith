@@ -16,7 +16,7 @@ import com.google.gson.JsonObject;
 
 public class AIClient {
 
-    private static final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(4);
     private static final Gson GSON = new Gson();
 
     public static void sendAsync(List<ChatMessage> messages, Consumer<String> onSuccess, Consumer<String> onError) {
@@ -69,12 +69,21 @@ public class AIClient {
                 }
 
                 JsonObject responseJson = GSON.fromJson(responseText, JsonObject.class);
-                String content = responseJson.getAsJsonArray("choices")
+                if (responseJson == null
+                    || !responseJson.has("choices")
+                    || responseJson.getAsJsonArray("choices").size() == 0) {
+                    onError.accept("Empty or malformed response: " + responseText);
+                    return;
+                }
+                JsonObject message = responseJson.getAsJsonArray("choices")
                     .get(0)
                     .getAsJsonObject()
-                    .getAsJsonObject("message")
-                    .get("content")
-                    .getAsString();
+                    .getAsJsonObject("message");
+                if (message == null || !message.has("content")) {
+                    onError.accept("Missing message.content in response");
+                    return;
+                }
+                String content = message.get("content").getAsString();
                 onSuccess.accept(content);
             } catch (Exception e) {
                 onError.accept(
