@@ -18,6 +18,7 @@ import com.google.gson.JsonObject;
 public class Config {
 
     private static final Gson GSON = new Gson();
+    public static String baseUrl = "https://api.openai.com";
     public static String apiKey = "";
     public static String model = "gpt-3.5-turbo";
     /**

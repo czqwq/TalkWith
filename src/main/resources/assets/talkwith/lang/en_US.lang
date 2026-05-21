@@ -71,7 +71,10 @@ talkwith.config.multi.view_hint=Use /talkwith status to view current session set
 # Status
 talkwith.status.client=Mode: §bSingle Mode§r | URL: %s | Model: %s | Prompt: §e%s§r
 talkwith.status.session_basic=Mode: §aServer Session§r | ID: %s
-talkwith.status.session_detail=Mode: %s (%s) | Session: §e%s§r | Members: %s | Prompt: §e%s§r
+talkwith.status.mode_role=Mode: %s (%s)
+talkwith.status.session_name=Session: §e%s§r
+talkwith.status.session_members=Members: %s
+talkwith.status.session_prompt=Prompt: §e%s§r
 talkwith.status.mode.single=§aSingle Mode§r
 talkwith.status.mode.multi=§aMulti-player Mode§r
 talkwith.status.mode.single_override=§eSingle Override Mode§r

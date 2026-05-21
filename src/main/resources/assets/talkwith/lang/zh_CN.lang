@@ -71,7 +71,10 @@ talkwith.config.multi.view_hint=使用 /talkwith status 查看当前会话设置
 # 状态显示
 talkwith.status.client=模式：§b单人模式§r | 地址：%s | 模型：%s | 提示词：§e%s§r
 talkwith.status.session_basic=模式：§a服务端会话§r | ID：%s
-talkwith.status.session_detail=模式：%s（%s）| 会话：§e%s§r | 成员数：%s | 提示词：§e%s§r
+talkwith.status.mode_role=模式：%s（%s）
+talkwith.status.session_name=会话：§e%s§r
+talkwith.status.session_members=成员数：%s
+talkwith.status.session_prompt=提示词：§e%s§r
 talkwith.status.mode.single=§a单人模式§r
 talkwith.status.mode.multi=§a多人模式§r
 talkwith.status.mode.single_override=§e单人覆盖模式§r

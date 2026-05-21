@@ -174,14 +174,16 @@ public class PacketSessionControl implements IMessage {
                 // explicitly switched back to local AI with /talkwith switch single.
                 String modeKey = isSingleOverride ? "talkwith.status.mode.single_override"
                     : "talkwith.status.mode.multi";
+                // Send each field as a separate message so that long Chinese text doesn't
+                // overflow a single chat line (each ChatComponentTranslation is self-contained).
                 player.addChatMessage(
                     okf(
-                        "talkwith.status.session_detail",
+                        "talkwith.status.mode_role",
                         new ChatComponentTranslation(modeKey),
-                        new ChatComponentTranslation(roleKey),
-                        nameOrId,
-                        s.players.size(),
-                        s.sessionPromptFile));
+                        new ChatComponentTranslation(roleKey)));
+                player.addChatMessage(okf("talkwith.status.session_name", nameOrId));
+                player.addChatMessage(okf("talkwith.status.session_members", s.players.size()));
+                player.addChatMessage(okf("talkwith.status.session_prompt", s.sessionPromptFile));
                 return null;
             }
 
