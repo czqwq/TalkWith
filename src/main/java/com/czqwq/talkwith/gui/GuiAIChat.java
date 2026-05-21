@@ -20,8 +20,6 @@ import com.czqwq.talkwith.network.PacketSessionMessage;
 
 public class GuiAIChat extends GuiScreen {
 
-    /** Maximum number of visible lines in the chat history area. */
-    private static final int MAX_VISIBLE_LINES = 10;
     /** Height of the input field. */
     private static final int INPUT_HEIGHT = 20;
     /** Vertical padding above the input field. */
@@ -125,25 +123,28 @@ public class GuiAIChat extends GuiScreen {
     private void drawScreenInternal(int mouseX, int mouseY, float partialTicks) {
         int lineHeight = fontRendererObj.FONT_HEIGHT + 2;
 
+        // Dynamically compute how many lines fit above the input field
+        int inputTop = height - INPUT_HEIGHT - INPUT_PAD * 2;
+        int maxVisibleLines = Math.max(1, (inputTop - 4) / lineHeight);
+
         // Gather the lines to display (thinking indicator counts as one line)
         List<String> display = buildDisplayLines(lineHeight);
 
         // Clamp scrollOffset to valid range
-        int maxScroll = Math.max(0, display.size() - MAX_VISIBLE_LINES);
+        int maxScroll = Math.max(0, display.size() - maxVisibleLines);
         if (scrollOffset < 0) scrollOffset = 0;
         if (scrollOffset > maxScroll) scrollOffset = maxScroll;
 
         // Determine which slice of lines to show
-        // scrollOffset 0 = show bottom MAX_VISIBLE_LINES; higher = scroll up
+        // scrollOffset 0 = show bottom maxVisibleLines; higher = scroll up
         int bottomIdx = display.size() - scrollOffset;
-        int topIdx = Math.max(0, bottomIdx - MAX_VISIBLE_LINES);
+        int topIdx = Math.max(0, bottomIdx - maxVisibleLines);
         int visibleCount = bottomIdx - topIdx;
 
         // Compute the bounding box of just the visible content area
         int chatAreaHeight = visibleCount * lineHeight;
 
         // Y coordinate where the chat text area starts (above the input row)
-        int inputTop = height - INPUT_HEIGHT - INPUT_PAD * 2;
         int chatAreaBottom = inputTop - 2; // small gap between chat and input
         int chatAreaTop = chatAreaBottom - chatAreaHeight;
 
@@ -163,9 +164,9 @@ public class GuiAIChat extends GuiScreen {
             y -= lineHeight;
         }
 
-        // Scroll indicator: show "^ N more ^" when scrolled up
+        // Scroll indicator: show "▲ N more" when scrolled up
         if (scrollOffset > 0) {
-            String scrollHint = "§7▲ " + scrollOffset + " more";
+            String scrollHint = StatCollector.translateToLocalFormatted("talkwith.gui.scroll_hint", scrollOffset);
             fontRendererObj.drawStringWithShadow(scrollHint, MARGIN, chatAreaTop - lineHeight - 2, 0xAAAAAA);
         }
 
@@ -231,20 +232,28 @@ public class GuiAIChat extends GuiScreen {
             PacketHandler.INSTANCE.sendToServer(new PacketSessionMessage(currentSessionId, text));
             // isThinking stays true until appendReply / appendError is called
         } else {
-            ClientProxy.clientSession.addMessage("user", text);
-            AIClient.sendAsync(
-                ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
-                reply -> ClientProxy.scheduleOnMainThread(() -> {
-                    ClientProxy.clientSession.addMessage("assistant", reply);
-                    lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
-                    isThinking = false;
-                    scrollToBottom();
-                }),
-                err -> ClientProxy.scheduleOnMainThread(() -> {
-                    lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
-                    isThinking = false;
-                }));
+            doClientAICall(text);
         }
+    }
+
+    /**
+     * Adds {@code text} to the local client session and fires an async AI request.
+     * Shared implementation used by both {@link #sendMessage()} and {@link #injectAndSend(String)}.
+     */
+    private void doClientAICall(String text) {
+        ClientProxy.clientSession.addMessage("user", text);
+        AIClient.sendAsync(
+            ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
+            reply -> ClientProxy.scheduleOnMainThread(() -> {
+                ClientProxy.clientSession.addMessage("assistant", reply);
+                lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
+                isThinking = false;
+                scrollToBottom();
+            }),
+            err -> ClientProxy.scheduleOnMainThread(() -> {
+                lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
+                isThinking = false;
+            }));
     }
 
     /**
@@ -275,22 +284,7 @@ public class GuiAIChat extends GuiScreen {
     public void injectAndSend(String text) {
         lines.add("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
         isThinking = true;
-        ClientProxy.clientSession.addMessage("user", text);
-        AIClient.sendAsync(
-            ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
-            Config.baseUrl,
-            Config.apiKey,
-            Config.model,
-            reply -> ClientProxy.scheduleOnMainThread(() -> {
-                ClientProxy.clientSession.addMessage("assistant", reply);
-                lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
-                isThinking = false;
-                scrollToBottom();
-            }),
-            err -> ClientProxy.scheduleOnMainThread(() -> {
-                lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
-                isThinking = false;
-            }));
+        doClientAICall(text);
     }
 
     /** Resets the scroll offset so the most recent lines are visible. */

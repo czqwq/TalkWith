@@ -1,9 +1,11 @@
 package com.czqwq.talkwith.network;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.gui.GuiAIChat;
+import com.czqwq.talkwith.util.TextUtils;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -48,6 +50,10 @@ public class PacketOpenGui implements IMessage {
                         Minecraft.getMinecraft()
                             .displayGuiScreen(null);
                     }
+                } else if (ClientProxy.useVanillaGui) {
+                    // Vanilla mode: just update the session ID and notify via chat
+                    ClientProxy.currentSessionId = sid;
+                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.gui.session_joined", sid));
                 } else {
                     ClientProxy.currentSessionId = sid;
                     // Open the GUI if it is not already open

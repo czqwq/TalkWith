@@ -4,6 +4,7 @@ import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.gui.GuiAIChat;
+import com.czqwq.talkwith.gui.GuiVanillaChat;
 import com.czqwq.talkwith.util.TextUtils;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -61,19 +62,28 @@ public class PacketSessionBroadcast implements IMessage {
             final String ar = msg.aiReply;
             final boolean err = msg.isError;
             ClientProxy.scheduleOnMainThread(() -> {
-                GuiAIChat gui = ClientProxy.activeGui;
-                if (err) {
-                    if (gui != null) {
-                        gui.appendError(ar);
+                if (ClientProxy.useVanillaGui) {
+                    // Vanilla mode: skip activeGui check, route directly to vanilla chat
+                    if (err) {
+                        GuiVanillaChat.appendError(ar);
                     } else {
-                        TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
+                        GuiVanillaChat.appendReply(pn, pm, ar);
                     }
                 } else {
-                    if (gui != null) {
-                        gui.appendReply(pn, pm, ar);
+                    GuiAIChat gui = ClientProxy.activeGui;
+                    if (err) {
+                        if (gui != null) {
+                            gui.appendError(ar);
+                        } else {
+                            TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
+                        }
                     } else {
-                        TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
-                        TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
+                        if (gui != null) {
+                            gui.appendReply(pn, pm, ar);
+                        } else {
+                            TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
+                            TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
+                        }
                     }
                 }
             });

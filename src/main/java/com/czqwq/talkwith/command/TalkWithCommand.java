@@ -10,6 +10,7 @@ import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
+import com.czqwq.talkwith.gui.GuiAIChat;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketJoinSession;
 import com.czqwq.talkwith.network.PacketSessionControl;
@@ -91,6 +92,12 @@ public class TalkWithCommand extends CommandBase {
                         StatCollector
                             .translateToLocalFormatted("talkwith.status.takeover", ClientProxy.takeoverChatMode));
                 }
+                // Always show the current GUI mode
+                TextUtils.info(
+                    StatCollector.translateToLocalFormatted(
+                        "talkwith.status.gui_mode",
+                        StatCollector.translateToLocal(
+                            ClientProxy.useVanillaGui ? "talkwith.gui.mode.vanilla" : "talkwith.gui.mode.default")));
             }
             case "history" -> {
                 if (args.length < 2) {
@@ -168,6 +175,7 @@ public class TalkWithCommand extends CommandBase {
                 ClientProxy.takeoverChatMode = mode;
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("chat_mode", mode));
             }
+            case "gui" -> handleGui(sender, args);
             default -> TextUtils
                 .error(StatCollector.translateToLocalFormatted("talkwith.unknown_sub", getCommandUsage(sender)));
         }
@@ -434,6 +442,45 @@ public class TalkWithCommand extends CommandBase {
     }
 
     // -------------------------------------------------------------------------
+    // /talkwith gui [default|vanilla]
+    // -------------------------------------------------------------------------
+
+    private void handleGui(ICommandSender sender, String[] args) {
+        if (args.length < 2) {
+            // Show current mode
+            TextUtils.info(
+                StatCollector.translateToLocal(
+                    ClientProxy.useVanillaGui ? "talkwith.gui.mode.vanilla" : "talkwith.gui.mode.default"));
+            return;
+        }
+        switch (args[1].toLowerCase()) {
+            case "default" -> {
+                ClientProxy.useVanillaGui = false;
+                Config.guiMode = "default";
+                Config.save();
+                TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_default"));
+                // If the player is in a session and the GUI is not open, open it
+                if (ClientProxy.currentSessionId != null && ClientProxy.activeGui == null) {
+                    Minecraft.getMinecraft()
+                        .displayGuiScreen(new GuiAIChat(""));
+                }
+            }
+            case "vanilla" -> {
+                ClientProxy.useVanillaGui = true;
+                Config.guiMode = "vanilla";
+                Config.save();
+                TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_vanilla"));
+                // Close GuiAIChat if it is currently open
+                if (ClientProxy.activeGui != null) {
+                    Minecraft.getMinecraft()
+                        .displayGuiScreen(null);
+                }
+            }
+            default -> TextUtils.error(StatCollector.translateToLocal("talkwith.gui.usage"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Tab completion
     // -------------------------------------------------------------------------
 
@@ -449,7 +496,8 @@ public class TalkWithCommand extends CommandBase {
                 "session",
                 "switch",
                 "takeover",
-                "chat");
+                "chat",
+                "gui");
         }
         if (args.length == 2) {
             switch (args[0].toLowerCase()) {
@@ -492,6 +540,8 @@ public class TalkWithCommand extends CommandBase {
                     return getListOfStringsMatchingLastWord(args, "single", "multi");
                 case "chat":
                     return getListOfStringsMatchingLastWord(args, "group", "public", "ai");
+                case "gui":
+                    return getListOfStringsMatchingLastWord(args, "default", "vanilla");
             }
         }
         if (args.length == 3) {

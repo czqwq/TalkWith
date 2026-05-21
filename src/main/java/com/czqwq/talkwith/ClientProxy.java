@@ -36,6 +36,12 @@ public class ClientProxy extends CommonProxy {
      * to route AI replies into the GUI rather than vanilla chat when the player has it open.
      */
     public static volatile GuiAIChat activeGui = null;
+    /**
+     * When {@code false} (default), AI replies are shown in {@link GuiAIChat}.
+     * When {@code true}, all AI I/O is routed through the vanilla chat HUD.
+     * Persisted via {@link Config#guiMode}; never reset on reconnect.
+     */
+    public static boolean useVanillaGui = false;
 
     private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 
@@ -46,6 +52,8 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void preInit(FMLPreInitializationEvent event) {
         super.preInit(event);
+        // Apply the persisted GUI mode preference (default vs vanilla)
+        useVanillaGui = "vanilla".equals(Config.guiMode);
     }
 
     @Override

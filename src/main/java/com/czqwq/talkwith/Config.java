@@ -33,6 +33,13 @@ public class Config {
     public static int timeout = 30;
     public static boolean saveHistory = false;
     public static int replyCooldown = 10;
+    /**
+     * Client GUI mode: {@code "default"} opens {@link com.czqwq.talkwith.gui.GuiAIChat},
+     * {@code "vanilla"} routes all AI I/O through the vanilla chat HUD.
+     * Persisted in {@code talkwith.cfg} so the preference survives game restarts.
+     * Applied to {@link com.czqwq.talkwith.ClientProxy#useVanillaGui} during client preInit.
+     */
+    public static String guiMode = "default";
 
     static File configFile;
     static Configuration config;
@@ -55,6 +62,11 @@ public class Config {
         maxHistory = config.getInt("maxHistory", "chat", 20, 1, 200, "Max conversation history pairs");
         replyCooldown = config.getInt("replyCooldown", "chat", 10, 0, 3600, "Cooldown between AI replies (seconds)");
         saveHistory = config.getBoolean("saveHistory", "session", false, "Save conversation history across sessions");
+        guiMode = config.getString(
+            "guiMode",
+            "client",
+            "default",
+            "Client GUI mode: default (GuiAIChat) or vanilla (vanilla chat HUD)");
         clientPromptFile = config.getString(
             "promptFile",
             "chat",
@@ -93,6 +105,9 @@ public class Config {
         config.getCategory("session")
             .get("saveHistory")
             .set(saveHistory);
+        config.getCategory("client")
+            .get("guiMode")
+            .set(guiMode);
         if (config.hasChanged()) {
             config.save();
         }

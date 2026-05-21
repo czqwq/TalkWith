@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.gui.GuiAIChat;
+import com.czqwq.talkwith.gui.GuiVanillaChat;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -43,16 +44,22 @@ public class PacketClientAIRequest implements IMessage {
 
         @Override
         public IMessage onMessage(PacketClientAIRequest msg, MessageContext ctx) {
+            final String pName = msg.playerName;
             final String pMsg = msg.message;
             ClientProxy.scheduleOnMainThread(() -> {
-                // Ensure GuiAIChat is open so the conversation is shown in the GUI
-                if (ClientProxy.activeGui == null) {
-                    Minecraft.getMinecraft()
-                        .displayGuiScreen(new GuiAIChat(""));
-                }
-                GuiAIChat gui = ClientProxy.activeGui;
-                if (gui != null) {
-                    gui.injectAndSend(pMsg);
+                if (ClientProxy.useVanillaGui) {
+                    // Vanilla mode: route AI call through vanilla chat
+                    GuiVanillaChat.injectAndSend(pName, pMsg);
+                } else {
+                    // Default mode: ensure GuiAIChat is open and inject into it
+                    if (ClientProxy.activeGui == null) {
+                        Minecraft.getMinecraft()
+                            .displayGuiScreen(new GuiAIChat(""));
+                    }
+                    GuiAIChat gui = ClientProxy.activeGui;
+                    if (gui != null) {
+                        gui.injectAndSend(pMsg);
+                    }
                 }
             });
             return null;
