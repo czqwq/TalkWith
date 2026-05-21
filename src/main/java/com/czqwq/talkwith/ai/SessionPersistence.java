@@ -185,11 +185,9 @@ public class SessionPersistence {
         if (json == null) return;
         try {
             File file = new File(sessionsDir, session.sessionId + ".json");
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"));
-            try {
+            try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(file), "UTF-8"))) {
                 writer.write(json);
-            } finally {
-                writer.close();
             }
         } catch (Exception e) {
             TalkWith.LOG.error("[TalkWith] Failed to save session file " + session.sessionId, e);
@@ -244,8 +242,8 @@ public class SessionPersistence {
 
     private static String readFileUtf8(File file) throws Exception {
         StringBuilder sb = new StringBuilder();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
-        try {
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
             String line;
             boolean first = true;
             while ((line = reader.readLine()) != null) {
@@ -253,8 +251,6 @@ public class SessionPersistence {
                 sb.append(line);
                 first = false;
             }
-        } finally {
-            reader.close();
         }
         return sb.toString();
     }
