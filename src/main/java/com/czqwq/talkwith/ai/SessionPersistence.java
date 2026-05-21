@@ -242,8 +242,7 @@ public class SessionPersistence {
 
     private static String readFileUtf8(File file) throws Exception {
         StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-            new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
             String line;
             boolean first = true;
             while ((line = reader.readLine()) != null) {
