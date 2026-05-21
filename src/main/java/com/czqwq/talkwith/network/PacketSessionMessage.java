@@ -93,6 +93,7 @@ public class PacketSessionMessage implements IMessage {
                 reply -> {
                     session.session.addMessage("assistant", reply);
                     session.lastReplyTime = System.currentTimeMillis();
+                    session.lastActivity = session.lastReplyTime;
                     session.addRecentMessage(playerName, msg.message, reply);
                     SessionWorldData.save();
                     ServerEventHandler.broadcastToSession(session, playerName, msg.message, reply, server);

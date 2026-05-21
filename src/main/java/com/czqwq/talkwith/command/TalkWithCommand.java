@@ -420,6 +420,15 @@ public class TalkWithCommand extends CommandBase {
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("deny", args[2]));
             }
+            case "public" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("set_public", ""));
+            case "private" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("set_private", ""));
+            case "transfer" -> {
+                if (args.length < 3) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.transfer_usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("transfer", args[2]));
+            }
             default -> TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
         }
     }
@@ -475,7 +484,10 @@ public class TalkWithCommand extends CommandBase {
                         "removemod",
                         "request",
                         "accept",
-                        "deny");
+                        "deny",
+                        "public",
+                        "private",
+                        "transfer");
                 case "switch":
                     return getListOfStringsMatchingLastWord(args, "single", "multi");
                 case "chat":

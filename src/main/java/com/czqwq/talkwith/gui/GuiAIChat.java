@@ -9,6 +9,8 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.util.StatCollector;
 
+import org.lwjgl.input.Mouse;
+
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.TalkWith;
@@ -69,6 +71,11 @@ public class GuiAIChat extends GuiScreen {
     private boolean isThinking = false;
     private int thinkingTick = 0;
     public String currentSessionId = null;
+    /**
+     * Scroll offset in lines. 0 = bottom (most recent). Positive values scroll up.
+     * Clamped during draw to the valid range.
+     */
+    private int scrollOffset = 0;
 
     public GuiAIChat(String initialText) {
         this.initialText = initialText;
@@ -86,9 +93,18 @@ public class GuiAIChat extends GuiScreen {
             INPUT_HEIGHT);
         inputField.setMaxStringLength(512);
         inputField.setFocused(true);
+        // Register this as the active GUI so packet handlers can push messages into it
+        ClientProxy.activeGui = this;
         if (initialText != null && !initialText.isEmpty()) {
             inputField.setText(initialText);
             sendMessage();
+        }
+    }
+
+    @Override
+    public void onGuiClosed() {
+        if (ClientProxy.activeGui == this) {
+            ClientProxy.activeGui = null;
         }
     }
 
@@ -112,8 +128,18 @@ public class GuiAIChat extends GuiScreen {
         // Gather the lines to display (thinking indicator counts as one line)
         List<String> display = buildDisplayLines(lineHeight);
 
+        // Clamp scrollOffset to valid range
+        int maxScroll = Math.max(0, display.size() - MAX_VISIBLE_LINES);
+        if (scrollOffset < 0) scrollOffset = 0;
+        if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+
+        // Determine which slice of lines to show
+        // scrollOffset 0 = show bottom MAX_VISIBLE_LINES; higher = scroll up
+        int bottomIdx = display.size() - scrollOffset;
+        int topIdx = Math.max(0, bottomIdx - MAX_VISIBLE_LINES);
+        int visibleCount = bottomIdx - topIdx;
+
         // Compute the bounding box of just the visible content area
-        int visibleCount = Math.min(display.size(), MAX_VISIBLE_LINES);
         int chatAreaHeight = visibleCount * lineHeight;
 
         // Y coordinate where the chat text area starts (above the input row)
@@ -132,9 +158,15 @@ public class GuiAIChat extends GuiScreen {
 
         // Render visible lines from bottom up
         int y = chatAreaBottom - lineHeight;
-        for (int i = display.size() - 1; i >= 0 && i >= display.size() - MAX_VISIBLE_LINES; i--) {
+        for (int i = bottomIdx - 1; i >= topIdx; i--) {
             fontRendererObj.drawStringWithShadow(display.get(i), MARGIN, y, 0xFFFFFF);
             y -= lineHeight;
+        }
+
+        // Scroll indicator: show "^ N more ^" when scrolled up
+        if (scrollOffset > 0) {
+            String scrollHint = "§7▲ " + scrollOffset + " more";
+            fontRendererObj.drawStringWithShadow(scrollHint, MARGIN, chatAreaTop - lineHeight - 2, 0xAAAAAA);
         }
 
         inputField.drawTextBox();
@@ -197,7 +229,7 @@ public class GuiAIChat extends GuiScreen {
 
         if (currentSessionId != null) {
             PacketHandler.INSTANCE.sendToServer(new PacketSessionMessage(currentSessionId, text));
-            isThinking = false;
+            // isThinking stays true until appendReply / appendError is called
         } else {
             ClientProxy.clientSession.addMessage("user", text);
             AIClient.sendAsync(
@@ -206,6 +238,7 @@ public class GuiAIChat extends GuiScreen {
                     ClientProxy.clientSession.addMessage("assistant", reply);
                     lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
                     isThinking = false;
+                    scrollToBottom();
                 }),
                 err -> ClientProxy.scheduleOnMainThread(() -> {
                     lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
@@ -214,10 +247,71 @@ public class GuiAIChat extends GuiScreen {
         }
     }
 
+    /**
+     * Called by {@link com.czqwq.talkwith.network.PacketSessionBroadcast.Handler} when the server
+     * broadcasts a completed AI reply for this session. Displays the exchange and clears the thinking
+     * indicator.
+     */
+    public void appendReply(String playerName, String playerMsg, String aiReply) {
+        lines.add("§e[" + playerName + "]: §f" + playerMsg);
+        lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + aiReply);
+        isThinking = false;
+        scrollToBottom();
+    }
+
+    /**
+     * Called by {@link com.czqwq.talkwith.network.PacketSessionBroadcast.Handler} when the server
+     * broadcasts an AI error for this session. Displays the error and clears the thinking indicator.
+     */
+    public void appendError(String errorMsg) {
+        lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + errorMsg);
+        isThinking = false;
+    }
+
+    /**
+     * Injects a user message and fires an async AI request. Used when the server routes a
+     * {@code >} command back to the client for local AI processing (single mode via chat).
+     */
+    public void injectAndSend(String text) {
+        lines.add("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
+        isThinking = true;
+        ClientProxy.clientSession.addMessage("user", text);
+        AIClient.sendAsync(
+            ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
+            Config.baseUrl,
+            Config.apiKey,
+            Config.model,
+            reply -> ClientProxy.scheduleOnMainThread(() -> {
+                ClientProxy.clientSession.addMessage("assistant", reply);
+                lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
+                isThinking = false;
+                scrollToBottom();
+            }),
+            err -> ClientProxy.scheduleOnMainThread(() -> {
+                lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
+                isThinking = false;
+            }));
+    }
+
+    /** Resets the scroll offset so the most recent lines are visible. */
+    private void scrollToBottom() {
+        scrollOffset = 0;
+    }
+
     @Override
     public void updateScreen() {
         thinkingTick++;
         inputField.updateCursorCounter();
+    }
+
+    @Override
+    public void handleMouseInput() {
+        super.handleMouseInput();
+        int wheel = Mouse.getEventDWheel();
+        if (wheel != 0) {
+            // Scroll up (wheel > 0) increases offset (shows older lines)
+            scrollOffset += wheel > 0 ? 1 : -1;
+        }
     }
 
     @Override

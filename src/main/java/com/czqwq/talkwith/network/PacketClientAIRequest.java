@@ -1,11 +1,9 @@
 package com.czqwq.talkwith.network;
 
-import net.minecraft.util.StatCollector;
+import net.minecraft.client.Minecraft;
 
 import com.czqwq.talkwith.ClientProxy;
-import com.czqwq.talkwith.Config;
-import com.czqwq.talkwith.ai.AIClient;
-import com.czqwq.talkwith.util.TextUtils;
+import com.czqwq.talkwith.gui.GuiAIChat;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -15,7 +13,7 @@ import io.netty.buffer.ByteBuf;
 
 /**
  * Server → Client: request the client to send a message to AI and display the result
- * in vanilla chat. Used when a player uses the ">" shortcut but is not in a server session.
+ * in the GuiAIChat. Used when a player uses the ">" shortcut but is not in a server session.
  */
 public class PacketClientAIRequest implements IMessage {
 
@@ -45,21 +43,17 @@ public class PacketClientAIRequest implements IMessage {
 
         @Override
         public IMessage onMessage(PacketClientAIRequest msg, MessageContext ctx) {
-            final String pName = msg.playerName;
             final String pMsg = msg.message;
             ClientProxy.scheduleOnMainThread(() -> {
-                TextUtils.addChatMessage("§e[" + pName + "]: §f" + pMsg);
-                ClientProxy.clientSession.addMessage("user", pMsg);
-                AIClient.sendAsync(
-                    ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
-                    Config.baseUrl,
-                    Config.apiKey,
-                    Config.model,
-                    reply -> ClientProxy.scheduleOnMainThread(() -> {
-                        ClientProxy.clientSession.addMessage("assistant", reply);
-                        TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), reply);
-                    }),
-                    err -> ClientProxy.scheduleOnMainThread(() -> TextUtils.error(err)));
+                // Ensure GuiAIChat is open so the conversation is shown in the GUI
+                if (ClientProxy.activeGui == null) {
+                    Minecraft.getMinecraft()
+                        .displayGuiScreen(new GuiAIChat(""));
+                }
+                GuiAIChat gui = ClientProxy.activeGui;
+                if (gui != null) {
+                    gui.injectAndSend(pMsg);
+                }
             });
             return null;
         }

@@ -1,6 +1,9 @@
 package com.czqwq.talkwith.network;
 
+import net.minecraft.client.Minecraft;
+
 import com.czqwq.talkwith.ClientProxy;
+import com.czqwq.talkwith.gui.GuiAIChat;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -37,8 +40,26 @@ public class PacketOpenGui implements IMessage {
         @Override
         public IMessage onMessage(PacketOpenGui msg, MessageContext ctx) {
             final String sid = msg.sessionId;
-            ClientProxy.scheduleOnMainThread(
-                () -> { ClientProxy.currentSessionId = (sid == null || sid.isEmpty()) ? null : sid; });
+            ClientProxy.scheduleOnMainThread(() -> {
+                if (sid == null || sid.isEmpty()) {
+                    ClientProxy.currentSessionId = null;
+                    // Close the GUI if it is currently open for a session
+                    if (ClientProxy.activeGui != null) {
+                        Minecraft.getMinecraft()
+                            .displayGuiScreen(null);
+                    }
+                } else {
+                    ClientProxy.currentSessionId = sid;
+                    // Open the GUI if it is not already open
+                    if (ClientProxy.activeGui == null) {
+                        Minecraft.getMinecraft()
+                            .displayGuiScreen(new GuiAIChat(""));
+                    } else {
+                        // Update the session ID on the already-open GUI
+                        ClientProxy.activeGui.currentSessionId = sid;
+                    }
+                }
+            });
             return null;
         }
     }

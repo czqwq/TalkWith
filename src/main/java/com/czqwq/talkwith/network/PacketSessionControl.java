@@ -91,6 +91,8 @@ public class PacketSessionControl implements IMessage {
                     PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
                 }
                 PacketHandler.INSTANCE.sendTo(new PacketShareInvite(playerName, session.sessionId), targetPlayer);
+                // Record the invitation so the target player can join a private session
+                session.invitedPlayers.add(targetPlayer.getUniqueID());
                 SessionWorldData.save();
                 return null;
             }
@@ -150,13 +152,17 @@ public class PacketSessionControl implements IMessage {
                 } else {
                     String nameOrId = infoSession.sessionName.isEmpty() ? infoSession.sessionId
                         : infoSession.sessionName;
+                    String visibilityKey = infoSession.isPublic ? "talkwith.session.visibility.public"
+                        : "talkwith.session.visibility.private";
                     player.addChatMessage(
                         okf(
                             "talkwith.session.info",
                             nameOrId,
                             infoSession.ownerName,
                             infoSession.players.size(),
-                            infoSession.sessionModel));
+                            infoSession.moderators.size(),
+                            infoSession.sessionModel,
+                            new ChatComponentTranslation(visibilityKey)));
                 }
                 return null;
             }
@@ -596,6 +602,54 @@ public class PacketSessionControl implements IMessage {
                         okf(
                             "talkwith.session.request_denied",
                             session.sessionName.isEmpty() ? session.sessionId : session.sessionName));
+                }
+                case "set_public" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    session.isPublic = true;
+                    SessionWorldData.save();
+                    player.addChatMessage(ok("talkwith.session.set_public"));
+                }
+                case "set_private" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    session.isPublic = false;
+                    SessionWorldData.save();
+                    player.addChatMessage(ok("talkwith.session.set_private"));
+                }
+                case "transfer" -> {
+                    if (!session.ownerUuid.equals(playerUuid)) {
+                        player.addChatMessage(err("talkwith.session.owner_only"));
+                        return null;
+                    }
+                    if (msg.target == null || msg.target.trim()
+                        .isEmpty()) {
+                        player.addChatMessage(err("talkwith.session.transfer_usage"));
+                        return null;
+                    }
+                    EntityPlayerMP targetPlayer = server.getConfigurationManager()
+                        .func_152612_a(msg.target);
+                    if (targetPlayer == null) {
+                        player.addChatMessage(errf("talkwith.session.player_not_found", msg.target));
+                        return null;
+                    }
+                    UUID targetUuid = targetPlayer.getUniqueID();
+                    if (!session.hasPlayer(targetUuid)) {
+                        player.addChatMessage(errf("talkwith.session.transfer_not_in_session", msg.target));
+                        return null;
+                    }
+                    session.ownerUuid = targetUuid;
+                    session.ownerName = targetPlayer.getCommandSenderName();
+                    // Transfer the owner's API credentials to the new owner's config defaults
+                    session.ownerBaseUrl = Config.baseUrl;
+                    session.ownerApiKey = Config.apiKey;
+                    SessionWorldData.save();
+                    player.addChatMessage(okf("talkwith.session.transferred_to", msg.target));
+                    targetPlayer.addChatMessage(ok("talkwith.session.owner_transferred"));
                 }
                 default -> player.addChatMessage(errf("talkwith.unknown_sub", msg.action));
             }
