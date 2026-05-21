@@ -117,7 +117,8 @@ public class SessionWorldData extends WorldSavedData {
         if (nbt.hasKey("singleOverride")) {
             NBTTagList soList = nbt.getTagList("singleOverride", NBT_COMPOUND);
             for (int i = 0; i < soList.tagCount(); i++) {
-                String uuidStr = soList.getCompoundTagAt(i).getString("uuid");
+                String uuidStr = soList.getCompoundTagAt(i)
+                    .getString("uuid");
                 if (uuidStr != null && !uuidStr.isEmpty()) {
                     try {
                         singleOverrideSet.add(UUID.fromString(uuidStr));
@@ -208,9 +209,7 @@ public class SessionWorldData extends WorldSavedData {
     }
 
     /**
-     * Loads sessions from world save data. If the world data is empty (first run / migration),
-     * falls back to {@link SessionPersistence#loadAll()} to import legacy JSON files, then
-     * immediately marks the world data dirty so the migration is persisted on the next save.
+     * Loads sessions from world save data.
      *
      * <p>
      * Must be called after the overworld (dimension 0) is available —
@@ -219,21 +218,9 @@ public class SessionWorldData extends WorldSavedData {
     public static void restore() {
         SessionWorldData data = get();
         if (data == null) {
-            // World not available — fall back to JSON (e.g. integrated server edge cases)
-            TalkWith.LOG.warn("[TalkWith] World not available for SessionWorldData; falling back to JSON files.");
-            SessionPersistence.loadAll();
+            TalkWith.LOG.warn("[TalkWith] World not available for SessionWorldData; no sessions restored.");
             return;
         }
         // readFromNBT was already invoked by loadData() above (if the file existed).
-        if (SharedSession.sessions.isEmpty()) {
-            // Either a brand-new world or first run after upgrading — migrate JSON files.
-            SessionPersistence.loadAll();
-            if (!SharedSession.sessions.isEmpty()) {
-                data.markDirty();
-                TalkWith.LOG.info(
-                    "[TalkWith] Migrated " + SharedSession.sessions.size()
-                        + " session(s) from JSON to world save data.");
-            }
-        }
     }
 }

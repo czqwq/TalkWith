@@ -1,10 +1,13 @@
 package com.czqwq.talkwith.network;
 
+import java.util.UUID;
+
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.IChatComponent;
 
+import com.czqwq.talkwith.ai.SessionWorldData;
 import com.czqwq.talkwith.ai.SharedSession;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -67,10 +70,19 @@ public class PacketJoinSession implements IMessage {
                 player.addChatMessage(err("talkwith.session.already_in_session"));
                 return null;
             }
+            // Private session: require a pending invitation
+            if (!session.isPublic) {
+                UUID playerUuid = player.getUniqueID();
+                if (!session.invitedPlayers.remove(playerUuid)) {
+                    player.addChatMessage(err("talkwith.session.private_no_invite"));
+                    return null;
+                }
+            }
             session.players.add(player.getUniqueID());
             String displayName = session.sessionName.isEmpty() ? session.sessionId : session.sessionName;
             player.addChatMessage(okf("talkwith.session.joined", displayName));
             PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
+            SessionWorldData.save();
             // Send recent history so the joining player has context
             for (String[] entry : session.recentMessages) {
                 PacketHandler.INSTANCE.sendTo(new PacketSessionBroadcast(entry[0], entry[1], entry[2]), player);

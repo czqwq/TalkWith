@@ -204,6 +204,7 @@ public class ServerEventHandler {
                 reply -> {
                     session.session.addMessage("assistant", reply);
                     session.lastReplyTime = System.currentTimeMillis();
+                    session.lastActivity = session.lastReplyTime;
                     session.addRecentMessage(playerName, text, reply);
                     SessionWorldData.save();
                     broadcastToSession(session, playerName, text, reply, server);

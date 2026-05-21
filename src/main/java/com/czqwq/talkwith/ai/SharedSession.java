@@ -24,8 +24,14 @@ public class SharedSession {
     public volatile UUID ownerUuid;
     public volatile String ownerName;
     public volatile long lastReplyTime = 0;
+    /** Unix timestamp (ms) of the last AI reply. Used to sort the session list. */
+    public volatile long lastActivity = 0;
     public final Set<UUID> players = new CopyOnWriteArraySet<>();
     public final Set<UUID> mutedPlayers = new CopyOnWriteArraySet<>();
+    /** Players granted moderator privileges by the owner. */
+    public final Set<UUID> moderators = new CopyOnWriteArraySet<>();
+    /** Pending join requests for private sessions. Approved via {@code /talkwith session accept}. */
+    public final Set<UUID> joinRequests = new CopyOnWriteArraySet<>();
     public final ChatSession session = new ChatSession();
     public volatile int cooldown;
     public volatile String ownerBaseUrl;
@@ -86,6 +92,14 @@ public class SharedSession {
 
     public boolean isMuted(UUID uuid) {
         return mutedPlayers.contains(uuid);
+    }
+
+    public boolean isMod(UUID uuid) {
+        return moderators.contains(uuid);
+    }
+
+    public boolean isOwnerOrMod(UUID uuid) {
+        return ownerUuid.equals(uuid) || moderators.contains(uuid);
     }
 
     public boolean hasPlayer(UUID uuid) {

@@ -4,7 +4,6 @@ import java.io.File;
 
 import net.minecraftforge.common.MinecraftForge;
 
-import com.czqwq.talkwith.ai.SessionPersistence;
 import com.czqwq.talkwith.network.PacketHandler;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -22,7 +21,6 @@ public class CommonProxy {
             "talkwith");
         configDir.mkdirs();
         Config.init(new File(configDir, "talkwith.cfg"));
-        SessionPersistence.init(new File(configDir, "sessions"));
     }
 
     public void init(FMLInitializationEvent event) {

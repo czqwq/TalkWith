@@ -385,6 +385,41 @@ public class TalkWithCommand extends CommandBase {
                 }
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("rename", args[2]));
             }
+            case "setmod" -> {
+                if (args.length < 3) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.setmod_usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setmod", args[2]));
+            }
+            case "removemod" -> {
+                if (args.length < 3) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.removemod_usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("removemod", args[2]));
+            }
+            case "request" -> {
+                if (args.length < 3) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.request_usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("request", args[2]));
+            }
+            case "accept" -> {
+                if (args.length < 3) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.accept_usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("accept", args[2]));
+            }
+            case "deny" -> {
+                if (args.length < 3) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.deny_usage"));
+                    return;
+                }
+                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("deny", args[2]));
+            }
             default -> TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
         }
     }
@@ -435,7 +470,12 @@ public class TalkWithCommand extends CommandBase {
                         "unmute",
                         "cooldown",
                         "history",
-                        "rename");
+                        "rename",
+                        "setmod",
+                        "removemod",
+                        "request",
+                        "accept",
+                        "deny");
                 case "switch":
                     return getListOfStringsMatchingLastWord(args, "single", "multi");
                 case "chat":

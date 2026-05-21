@@ -66,17 +66,14 @@ public class PacketSessionBroadcast implements IMessage {
                     if (gui != null) {
                         gui.appendError(ar);
                     } else {
-                        TextUtils.error(
-                            StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
+                        TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
                     }
                 } else {
                     if (gui != null) {
                         gui.appendReply(pn, pm, ar);
                     } else {
                         TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
-                        TextUtils.sendAIReply(
-                            StatCollector.translateToLocal("talkwith.chat.ai_prefix"),
-                            ar);
+                        TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
                     }
                 }
             });

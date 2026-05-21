@@ -1,13 +1,5 @@
 package com.czqwq.talkwith.ai;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FilenameFilter;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -22,26 +14,12 @@ import com.google.gson.JsonObject;
  * Handles (de)serialization of {@link SharedSession} to/from JSON.
  *
  * <p>
- * The primary save location is now {@link SessionWorldData} (world save).
- * This class is retained for:
- * <ul>
- * <li>Migration from older versions (JSON files in {@code config/talkwith/sessions/}).</li>
- * <li>The {@link #toJson}/{@link #fromJson} helpers used by {@link SessionWorldData}.</li>
- * </ul>
- *
- * <p>
- * {@link #save} and {@link #delete} are preserved for emergency/manual use;
- * the main code path uses {@link SessionWorldData#markDirty()} instead.
+ * The {@link #toJson}/{@link #fromJson} helpers are used by {@link SessionWorldData} to store
+ * session state as JSON strings inside the world save NBT.
  */
 public class SessionPersistence {
 
-    private static File sessionsDir;
     private static final Gson GSON = new Gson();
-
-    public static void init(File dir) {
-        sessionsDir = dir;
-        sessionsDir.mkdirs();
-    }
 
     // -------------------------------------------------------------------------
     // JSON serialization helpers — used by SessionWorldData
@@ -64,6 +42,19 @@ public class SessionPersistence {
             obj.addProperty("cooldown", session.cooldown);
             obj.addProperty("sessionMaxHistory", session.sessionMaxHistory);
             obj.addProperty("isPublic", session.isPublic);
+            obj.addProperty("lastActivity", session.lastActivity);
+
+            JsonArray modsArray = new JsonArray();
+            for (UUID uuid : session.moderators) {
+                modsArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
+            }
+            obj.add("moderators", modsArray);
+
+            JsonArray joinReqArray = new JsonArray();
+            for (UUID uuid : session.joinRequests) {
+                joinReqArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
+            }
+            obj.add("joinRequests", joinReqArray);
 
             JsonArray histArray = new JsonArray();
             for (ChatMessage msg : session.session.getHistory()) {
@@ -146,6 +137,26 @@ public class SessionPersistence {
                 session.isPublic = obj.get("isPublic")
                     .getAsBoolean();
             }
+            if (obj.has("lastActivity")) {
+                session.lastActivity = obj.get("lastActivity")
+                    .getAsLong();
+            }
+
+            if (obj.has("moderators")) {
+                for (JsonElement el : obj.getAsJsonArray("moderators")) {
+                    try {
+                        session.moderators.add(UUID.fromString(el.getAsString()));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
+
+            if (obj.has("joinRequests")) {
+                for (JsonElement el : obj.getAsJsonArray("joinRequests")) {
+                    try {
+                        session.joinRequests.add(UUID.fromString(el.getAsString()));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
 
             if (obj.has("history")) {
                 List<ChatMessage> history = new ArrayList<>();
@@ -179,88 +190,5 @@ public class SessionPersistence {
             TalkWith.LOG.error("[TalkWith] Failed to deserialize session JSON", e);
             return null;
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // File-based save/delete — kept for emergency/manual use and migration
-    // -------------------------------------------------------------------------
-
-    /**
-     * Writes a session's full state to {@code config/talkwith/sessions/<id>.json}.
-     * Prefer {@link SessionWorldData#markDirty()} for normal operation.
-     */
-    public static void save(SharedSession session) {
-        if (sessionsDir == null) return;
-        String json = toJson(session);
-        if (json == null) return;
-        try {
-            File file = new File(sessionsDir, session.sessionId + ".json");
-            try (BufferedWriter writer = new BufferedWriter(
-                new OutputStreamWriter(new FileOutputStream(file), "UTF-8"))) {
-                writer.write(json);
-            }
-        } catch (Exception e) {
-            TalkWith.LOG.error("[TalkWith] Failed to save session file " + session.sessionId, e);
-        }
-    }
-
-    /** Removes the on-disk file for a session that has been closed. */
-    public static void delete(String sessionId) {
-        if (sessionsDir == null) return;
-        File file = new File(sessionsDir, sessionId + ".json");
-        if (file.exists() && !file.delete()) {
-            TalkWith.LOG.warn("[TalkWith] Could not delete session file: " + file.getPath());
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Migration: load all JSON files (used on first run with new world-save system)
-    // -------------------------------------------------------------------------
-
-    /**
-     * Scans {@code config/talkwith/sessions/} and loads any saved sessions.
-     * Used only for one-time migration to {@link SessionWorldData}.
-     */
-    public static void loadAll() {
-        if (sessionsDir == null || !sessionsDir.exists()) return;
-        File[] files = sessionsDir.listFiles(new FilenameFilter() {
-
-            @Override
-            public boolean accept(File dir, String name) {
-                return name.endsWith(".json");
-            }
-        });
-        if (files == null) return;
-
-        int loaded = 0;
-        for (File file : files) {
-            try {
-                String raw = readFileUtf8(file);
-                SharedSession session = fromJson(raw);
-                if (session != null) {
-                    SharedSession.sessions.put(session.sessionId, session);
-                    loaded++;
-                }
-            } catch (Exception e) {
-                TalkWith.LOG.error("[TalkWith] Failed to load session from " + file.getName(), e);
-            }
-        }
-        if (loaded > 0) {
-            TalkWith.LOG.info("[TalkWith] Migrated " + loaded + " session(s) from JSON files.");
-        }
-    }
-
-    private static String readFileUtf8(File file) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
-            String line;
-            boolean first = true;
-            while ((line = reader.readLine()) != null) {
-                if (!first) sb.append('\n');
-                sb.append(line);
-                first = false;
-            }
-        }
-        return sb.toString();
     }
 }
