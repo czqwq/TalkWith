@@ -1,8 +1,10 @@
 package com.czqwq.talkwith.ai;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -10,6 +12,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.WorldSavedData;
 import net.minecraft.world.storage.MapStorage;
 
+import com.czqwq.talkwith.ServerEventHandler;
 import com.czqwq.talkwith.TalkWith;
 
 /**
@@ -43,6 +46,13 @@ public class SessionWorldData extends WorldSavedData {
      */
     public static final Map<UUID, String> playerSessionMap = new ConcurrentHashMap<>();
 
+    /**
+     * Players who had {@code /talkwith switch single} active when they disconnected.
+     * Persisted here and consumed on reconnect to restore single-override state.
+     * Includes currently-online players between saves (written to NBT on world save).
+     */
+    public static final Set<UUID> singleOverrideSet = new CopyOnWriteArraySet<>();
+
     public SessionWorldData(String name) {
         super(name);
     }
@@ -56,6 +66,7 @@ public class SessionWorldData extends WorldSavedData {
         // Clear existing sessions — this is only called once on world load.
         SharedSession.sessions.clear();
         playerSessionMap.clear();
+        singleOverrideSet.clear();
 
         if (nbt.hasKey("sessions")) {
             NBTTagList list = nbt.getTagList("sessions", NBT_COMPOUND);
@@ -101,6 +112,19 @@ public class SessionWorldData extends WorldSavedData {
                 }
             }
         }
+
+        // Restore singleModeOverride state for offline players
+        if (nbt.hasKey("singleOverride")) {
+            NBTTagList soList = nbt.getTagList("singleOverride", NBT_COMPOUND);
+            for (int i = 0; i < soList.tagCount(); i++) {
+                String uuidStr = soList.getCompoundTagAt(i).getString("uuid");
+                if (uuidStr != null && !uuidStr.isEmpty()) {
+                    try {
+                        singleOverrideSet.add(UUID.fromString(uuidStr));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
+        }
     }
 
     @Override
@@ -137,6 +161,18 @@ public class SessionWorldData extends WorldSavedData {
             psList.appendTag(e);
         }
         nbt.setTag("playerSessions", psList);
+
+        // Persist singleModeOverride: union of offline set and currently-online players
+        java.util.Set<UUID> allSingleOverride = new java.util.HashSet<>();
+        allSingleOverride.addAll(singleOverrideSet);
+        allSingleOverride.addAll(ServerEventHandler.singleModeOverride);
+        NBTTagList soList = new NBTTagList();
+        for (UUID uuid : allSingleOverride) {
+            NBTTagCompound e = new NBTTagCompound();
+            e.setString("uuid", uuid.toString());
+            soList.appendTag(e);
+        }
+        nbt.setTag("singleOverride", soList);
     }
 
     // -------------------------------------------------------------------------

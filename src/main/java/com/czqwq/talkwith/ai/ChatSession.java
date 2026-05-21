@@ -14,10 +14,13 @@ public class ChatSession {
     }
 
     public synchronized List<ChatMessage> getMessages(String systemPrompt) {
+        return getMessages(systemPrompt, Config.maxHistory);
+    }
+
+    public synchronized List<ChatMessage> getMessages(String systemPrompt, int maxHistory) {
         List<ChatMessage> result = new ArrayList<>();
         result.add(new ChatMessage("system", systemPrompt));
-        int maxPairs = Config.maxHistory;
-        int maxMessages = maxPairs * 2;
+        int maxMessages = maxHistory * 2;
         int start = Math.max(0, history.size() - maxMessages);
         for (int i = start; i < history.size(); i++) {
             result.add(history.get(i));

@@ -10,7 +10,6 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
-import net.minecraft.util.IChatComponent;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.world.WorldEvent;
 
@@ -66,6 +65,10 @@ public class ServerEventHandler {
             if (session != null) {
                 session.players.add(playerUuid);
                 PacketHandler.INSTANCE.sendTo(new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId), player);
+                // Restore single-override state if it was persisted on logout
+                if (SessionWorldData.singleOverrideSet.remove(playerUuid)) {
+                    singleModeOverride.add(playerUuid);
+                }
                 SessionWorldData.save();
             }
         }
@@ -75,47 +78,22 @@ public class ServerEventHandler {
     public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (!(event.player instanceof EntityPlayerMP)) return;
         UUID playerUuid = event.player.getUniqueID();
-        MinecraftServer server = MinecraftServer.getServer();
 
-        // Clear all per-player state
+        // Clear all per-player state.
+        // Save single-override state before clearing so it can be restored on reconnect.
+        if (singleModeOverride.contains(playerUuid)) {
+            SessionWorldData.singleOverrideSet.add(playerUuid);
+        }
         clearPlayerState(playerUuid);
 
         for (SharedSession session : SharedSession.sessions.values()) {
             if (!session.hasPlayer(playerUuid)) continue;
 
-            // Remember which session this player was in so they can be restored on reconnect
+            // Remember which session this player was in so they can be restored on reconnect.
             SessionWorldData.playerSessionMap.put(playerUuid, session.sessionId);
-
-            if (session.ownerUuid.equals(playerUuid)) {
-                // Try to transfer ownership to the next online member
-                UUID newOwnerUuid = null;
-                String newOwnerName = null;
-                for (UUID uuid : session.players) {
-                    if (!uuid.equals(playerUuid)) {
-                        EntityPlayerMP candidate = getPlayerByUUID(server, uuid);
-                        if (candidate != null) {
-                            newOwnerUuid = uuid;
-                            newOwnerName = candidate.getCommandSenderName();
-                            break;
-                        }
-                    }
-                }
-
-                session.players.remove(playerUuid);
-                if (newOwnerUuid != null) {
-                    session.ownerUuid = newOwnerUuid;
-                    session.ownerName = newOwnerName;
-                    EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
-                    if (newOwnerPlayer != null) {
-                        newOwnerPlayer.addChatMessage(
-                            new ChatComponentText("§a[TalkWith]§r ")
-                                .appendSibling(new ChatComponentTranslation("talkwith.session.owner_transferred")));
-                    }
-                }
-                // Session stays in SharedSession.sessions — persisted for reconnect even with no members
-            } else {
-                session.players.remove(playerUuid);
-            }
+            session.players.remove(playerUuid);
+            // Session stays alive — ownership is NOT auto-transferred on logout.
+            // The owner must explicitly use /talkwith session transfer <player> first.
             SessionWorldData.save();
             break;
         }
@@ -217,8 +195,9 @@ public class ServerEventHandler {
             final MinecraftServer server = MinecraftServer.getServer();
             session.session.addMessage("user", playerName + ": " + text);
             String prompt = Config.loadPromptFromFile(session.sessionPromptFile);
+            int maxHist = session.sessionMaxHistory > 0 ? session.sessionMaxHistory : Config.maxHistory;
             AIClient.sendAsync(
-                session.session.getMessages(prompt),
+                session.session.getMessages(prompt, maxHist),
                 session.ownerBaseUrl,
                 session.ownerApiKey,
                 session.sessionModel,
@@ -280,7 +259,7 @@ public class ServerEventHandler {
     // Session broadcast helpers
     // -------------------------------------------------------------------------
 
-    private static void broadcastToSession(SharedSession session, String playerName, String playerMsg, String reply,
+    public static void broadcastToSession(SharedSession session, String playerName, String playerMsg, String reply,
         MinecraftServer server) {
         PacketSessionBroadcast packet = new PacketSessionBroadcast(playerName, playerMsg, reply);
         for (UUID uuid : session.players) {
@@ -291,13 +270,12 @@ public class ServerEventHandler {
         }
     }
 
-    private static void broadcastErrorToSession(SharedSession session, String err, MinecraftServer server) {
+    public static void broadcastErrorToSession(SharedSession session, String err, MinecraftServer server) {
+        PacketSessionBroadcast errorPacket = PacketSessionBroadcast.error(err);
         for (UUID uuid : session.players) {
             EntityPlayerMP member = getPlayerByUUID(server, uuid);
             if (member != null) {
-                member.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r ")
-                        .appendSibling(new ChatComponentTranslation("talkwith.session.ai_error", err)));
+                PacketHandler.INSTANCE.sendTo(errorPacket, member);
             }
         }
     }
@@ -317,7 +295,7 @@ public class ServerEventHandler {
     }
 
     @SuppressWarnings("unchecked")
-    static EntityPlayerMP getPlayerByUUID(MinecraftServer server, UUID uuid) {
+    public static EntityPlayerMP getPlayerByUUID(MinecraftServer server, UUID uuid) {
         for (Object obj : server.getConfigurationManager().playerEntityList) {
             EntityPlayerMP p = (EntityPlayerMP) obj;
             if (p.getUniqueID()

@@ -62,6 +62,8 @@ public class SessionPersistence {
                 "sessionPromptFile",
                 session.sessionPromptFile != null ? session.sessionPromptFile : "system_prompt.json");
             obj.addProperty("cooldown", session.cooldown);
+            obj.addProperty("sessionMaxHistory", session.sessionMaxHistory);
+            obj.addProperty("isPublic", session.isPublic);
 
             JsonArray histArray = new JsonArray();
             for (ChatMessage msg : session.session.getHistory()) {
@@ -135,6 +137,14 @@ public class SessionPersistence {
                 .isEmpty()) {
                 session.sessionPromptFile = obj.get("sessionPromptFile")
                     .getAsString();
+            }
+            if (obj.has("sessionMaxHistory")) {
+                session.sessionMaxHistory = obj.get("sessionMaxHistory")
+                    .getAsInt();
+            }
+            if (obj.has("isPublic")) {
+                session.isPublic = obj.get("isPublic")
+                    .getAsBoolean();
             }
 
             if (obj.has("history")) {

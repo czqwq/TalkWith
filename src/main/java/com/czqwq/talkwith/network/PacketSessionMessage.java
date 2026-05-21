@@ -9,6 +9,7 @@ import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.IChatComponent;
 
 import com.czqwq.talkwith.Config;
+import com.czqwq.talkwith.ServerEventHandler;
 import com.czqwq.talkwith.ai.AIClient;
 import com.czqwq.talkwith.ai.SessionWorldData;
 import com.czqwq.talkwith.ai.SharedSession;
@@ -82,9 +83,10 @@ public class PacketSessionMessage implements IMessage {
             session.session.addMessage("user", playerName + ": " + msg.message);
             MinecraftServer server = MinecraftServer.getServer();
             String prompt = Config.loadPromptFromFile(session.sessionPromptFile);
+            int maxHist = session.sessionMaxHistory > 0 ? session.sessionMaxHistory : Config.maxHistory;
 
             AIClient.sendAsync(
-                session.session.getMessages(prompt),
+                session.session.getMessages(prompt, maxHist),
                 session.ownerBaseUrl,
                 session.ownerApiKey,
                 session.sessionModel,
@@ -93,39 +95,9 @@ public class PacketSessionMessage implements IMessage {
                     session.lastReplyTime = System.currentTimeMillis();
                     session.addRecentMessage(playerName, msg.message, reply);
                     SessionWorldData.save();
-                    broadcastToSession(session, playerName, msg.message, reply, server);
+                    ServerEventHandler.broadcastToSession(session, playerName, msg.message, reply, server);
                 },
-                error -> broadcastErrorToSession(session, error, server));
-            return null;
-        }
-
-        private void broadcastToSession(SharedSession session, String playerName, String playerMsg, String reply,
-            MinecraftServer server) {
-            PacketSessionBroadcast packet = new PacketSessionBroadcast(playerName, playerMsg, reply);
-            for (UUID uuid : session.players) {
-                EntityPlayerMP member = getPlayerByUUID(server, uuid);
-                if (member != null) {
-                    PacketHandler.INSTANCE.sendTo(packet, member);
-                }
-            }
-        }
-
-        private void broadcastErrorToSession(SharedSession session, String error, MinecraftServer server) {
-            for (UUID uuid : session.players) {
-                EntityPlayerMP member = getPlayerByUUID(server, uuid);
-                if (member != null) {
-                    member.addChatMessage(errf("talkwith.session.ai_error", error));
-                }
-            }
-        }
-
-        @SuppressWarnings("unchecked")
-        private static EntityPlayerMP getPlayerByUUID(MinecraftServer server, UUID uuid) {
-            for (Object obj : server.getConfigurationManager().playerEntityList) {
-                EntityPlayerMP p = (EntityPlayerMP) obj;
-                if (p.getUniqueID()
-                    .equals(uuid)) return p;
-            }
+                error -> ServerEventHandler.broadcastErrorToSession(session, error, server));
             return null;
         }
     }

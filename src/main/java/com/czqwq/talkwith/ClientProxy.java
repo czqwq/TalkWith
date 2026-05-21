@@ -7,6 +7,7 @@ import net.minecraftforge.common.MinecraftForge;
 
 import com.czqwq.talkwith.ai.ChatSession;
 import com.czqwq.talkwith.command.TalkWithCommand;
+import com.czqwq.talkwith.gui.GuiAIChat;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -29,6 +30,12 @@ public class ClientProxy extends CommonProxy {
      * Only meaningful when {@link #isTakeover} is true.
      */
     public static String takeoverChatMode = "ai";
+    /**
+     * The currently-open {@link GuiAIChat} instance, or {@code null} when the GUI is closed.
+     * Set by {@link GuiAIChat} on open/close. Used by {@link com.czqwq.talkwith.network.PacketSessionBroadcast}
+     * to route AI replies into the GUI rather than vanilla chat when the player has it open.
+     */
+    public static volatile GuiAIChat activeGui = null;
 
     private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
 

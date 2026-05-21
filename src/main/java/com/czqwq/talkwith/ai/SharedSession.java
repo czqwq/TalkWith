@@ -31,6 +31,12 @@ public class SharedSession {
     public volatile String ownerBaseUrl;
     public volatile String ownerApiKey;
     public volatile String sessionModel;
+    /** Per-session max history pair count. 0 means use the global {@link com.czqwq.talkwith.Config#maxHistory}. */
+    public volatile int sessionMaxHistory = 0;
+    /** If false, only players in {@link #invitedPlayers} may join. Defaults to true (public). */
+    public volatile boolean isPublic = true;
+    /** Pending invitations for private sessions. Consumed (removed) when the player joins. */
+    public final Set<UUID> invitedPlayers = new CopyOnWriteArraySet<>();
 
     /**
      * Ring-buffer of recent [playerName, playerMsg, aiReply] triples.
