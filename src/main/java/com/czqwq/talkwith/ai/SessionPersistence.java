@@ -56,6 +56,18 @@ public class SessionPersistence {
             }
             obj.add("joinRequests", joinReqArray);
 
+            JsonArray invitedArray = new JsonArray();
+            for (UUID uuid : session.invitedPlayers) {
+                invitedArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
+            }
+            obj.add("invitedPlayers", invitedArray);
+
+            JsonArray mutedArray = new JsonArray();
+            for (UUID uuid : session.mutedPlayers) {
+                mutedArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
+            }
+            obj.add("mutedPlayers", mutedArray);
+
             JsonArray histArray = new JsonArray();
             for (ChatMessage msg : session.session.getHistory()) {
                 JsonObject m = new JsonObject();
@@ -154,6 +166,22 @@ public class SessionPersistence {
                 for (JsonElement el : obj.getAsJsonArray("joinRequests")) {
                     try {
                         session.joinRequests.add(UUID.fromString(el.getAsString()));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
+
+            if (obj.has("invitedPlayers")) {
+                for (JsonElement el : obj.getAsJsonArray("invitedPlayers")) {
+                    try {
+                        session.invitedPlayers.add(UUID.fromString(el.getAsString()));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
+
+            if (obj.has("mutedPlayers")) {
+                for (JsonElement el : obj.getAsJsonArray("mutedPlayers")) {
+                    try {
+                        session.mutedPlayers.add(UUID.fromString(el.getAsString()));
                     } catch (IllegalArgumentException ignored) {}
                 }
             }

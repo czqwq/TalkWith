@@ -59,13 +59,16 @@ public class ServerEventHandler {
         // Announce the mod is present on this server
         PacketHandler.INSTANCE.sendTo(new PacketHandshake(), player);
 
-        // Restore previous session if the player disconnected while in one
+        // Restore previous session if the player disconnected while in one.
+        // Use a silent packet so the GUI does not auto-open on every login.
         String lastSessionId = SessionWorldData.playerSessionMap.remove(playerUuid);
         if (lastSessionId != null) {
             SharedSession session = SharedSession.sessions.get(lastSessionId);
             if (session != null) {
                 session.players.add(playerUuid);
-                PacketHandler.INSTANCE.sendTo(new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId), player);
+                // silent=true: only update currentSessionId on the client, no GUI popup
+                PacketHandler.INSTANCE
+                    .sendTo(new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId, true), player);
                 // Restore single-override state if it was persisted on logout
                 if (SessionWorldData.singleOverrideSet.remove(playerUuid)) {
                     singleModeOverride.add(playerUuid);
@@ -193,6 +196,16 @@ public class ServerEventHandler {
                 return;
             }
 
+            // Prevent concurrent AI requests for the same session (race condition guard)
+            if (!session.isProcessing.compareAndSet(false, true)) {
+                long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
+                    / 1000 + 1;
+                player.addChatMessage(
+                    new ChatComponentText("§c[TalkWith]§r ")
+                        .appendSibling(new ChatComponentTranslation("talkwith.session.cooldown", remaining)));
+                return;
+            }
+
             final MinecraftServer server = MinecraftServer.getServer();
             session.session.addMessage("user", playerName + ": " + text);
             String prompt = Config.loadPromptFromFile(session.sessionPromptFile);
@@ -203,6 +216,7 @@ public class ServerEventHandler {
                 session.ownerApiKey,
                 session.sessionModel,
                 reply -> {
+                    session.isProcessing.set(false);
                     session.session.addMessage("assistant", reply);
                     session.lastReplyTime = System.currentTimeMillis();
                     session.lastActivity = session.lastReplyTime;
@@ -210,7 +224,10 @@ public class ServerEventHandler {
                     SessionWorldData.save();
                     broadcastToSession(session, playerName, text, reply, server);
                 },
-                err -> broadcastErrorToSession(session, err, server));
+                err -> {
+                    session.isProcessing.set(false);
+                    broadcastErrorToSession(session, err, server);
+                });
         } else {
             // No session or single-mode override: delegate to the client for local AI processing
             PacketHandler.INSTANCE.sendTo(new PacketClientAIRequest(playerName, text), player);

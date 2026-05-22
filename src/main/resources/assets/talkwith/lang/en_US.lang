@@ -56,6 +56,8 @@ talkwith.session.history_usage=Usage: /talkwith session history clear
 talkwith.session.leave_usage=Usage: /talkwith session leave
 talkwith.session.owner_transferred=Session ownership transferred to you.
 talkwith.session.name_taken=A session named '§e%s§r' already exists.
+talkwith.session.name_required=Session name is required. Usage: /talkwith session server create <name>
+talkwith.session.close_ok=Session closed successfully.
 talkwith.session.rename_usage=Usage: /talkwith session rename <newname>
 talkwith.session.renamed=Session renamed to: §e%s§r
 # Config commands

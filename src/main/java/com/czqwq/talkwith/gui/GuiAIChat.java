@@ -78,6 +78,8 @@ public class GuiAIChat extends GuiScreen {
     public GuiAIChat(String initialText) {
         this.initialText = initialText;
         this.currentSessionId = ClientProxy.currentSessionId;
+        // Initialise from the shared persistent history so older messages are visible
+        this.lines.addAll(ClientProxy.chatHistory);
     }
 
     @Override
@@ -224,7 +226,7 @@ public class GuiAIChat extends GuiScreen {
             .trim();
         if (text.isEmpty()) return;
 
-        lines.add("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
+        addLine("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
         inputField.setText("");
         isThinking = true;
 
@@ -246,34 +248,37 @@ public class GuiAIChat extends GuiScreen {
             ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
             reply -> ClientProxy.scheduleOnMainThread(() -> {
                 ClientProxy.clientSession.addMessage("assistant", reply);
-                lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
+                addLine(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
                 isThinking = false;
                 scrollToBottom();
             }),
             err -> ClientProxy.scheduleOnMainThread(() -> {
-                lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
+                addLine(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
                 isThinking = false;
             }));
     }
 
     /**
      * Called by {@link com.czqwq.talkwith.network.PacketSessionBroadcast.Handler} when the server
-     * broadcasts a completed AI reply for this session. Displays the exchange and clears the thinking
-     * indicator.
+     * broadcasts a completed AI reply for this session.
+     * The packet handler already pushed the content to {@link ClientProxy#chatHistory};
+     * this method only clears the thinking indicator and scrolls to the latest line.
      */
     public void appendReply(String playerName, String playerMsg, String aiReply) {
-        lines.add("§e[" + playerName + "]: §f" + playerMsg);
-        lines.add(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + aiReply);
+        // Data already added to ClientProxy.chatHistory by PacketSessionBroadcast.Handler;
+        // sync the local lines list with any new entries and scroll to bottom.
+        syncLines();
         isThinking = false;
         scrollToBottom();
     }
 
     /**
      * Called by {@link com.czqwq.talkwith.network.PacketSessionBroadcast.Handler} when the server
-     * broadcasts an AI error for this session. Displays the error and clears the thinking indicator.
+     * broadcasts an AI error for this session.
+     * The packet handler already pushed the error to {@link ClientProxy#chatHistory}.
      */
     public void appendError(String errorMsg) {
-        lines.add(StatCollector.translateToLocal("talkwith.chat.error_prefix") + errorMsg);
+        syncLines();
         isThinking = false;
     }
 
@@ -282,9 +287,33 @@ public class GuiAIChat extends GuiScreen {
      * {@code >} command back to the client for local AI processing (single mode via chat).
      */
     public void injectAndSend(String text) {
-        lines.add("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
+        addLine("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
         isThinking = true;
         doClientAICall(text);
+    }
+
+    /**
+     * Appends {@code line} to both the persistent {@link ClientProxy#chatHistory} and the
+     * local {@link #lines} list so the GUI and future GUI instances both see it.
+     */
+    private void addLine(String line) {
+        ClientProxy.addToChatHistory(line);
+        lines.add(line);
+    }
+
+    /**
+     * Brings the local {@link #lines} list in sync with {@link ClientProxy#chatHistory}.
+     * Called after the packet handler has pushed new content to the shared history.
+     */
+    private void syncLines() {
+        if (lines.size() < ClientProxy.chatHistory.size()) {
+            // Append only the entries that are newer than what we already have
+            int newStart = lines.size();
+            List<String> history = ClientProxy.chatHistory;
+            for (int i = newStart; i < history.size(); i++) {
+                lines.add(history.get(i));
+            }
+        }
     }
 
     /** Resets the scroll offset so the most recent lines are visible. */

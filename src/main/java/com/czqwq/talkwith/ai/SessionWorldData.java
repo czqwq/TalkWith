@@ -79,18 +79,6 @@ public class SessionWorldData extends WorldSavedData {
                 if (session != null) {
                     SharedSession.sessions.put(session.sessionId, session);
                     loaded++;
-                    // Populate playerSessionMap from stored player UUIDs to handle
-                    // single-player saves that occur before onPlayerLogout fires.
-                    NBTTagList sessionPlayers = entry.getTagList("players", NBT_COMPOUND);
-                    for (int j = 0; j < sessionPlayers.tagCount(); j++) {
-                        String uuidStr = sessionPlayers.getCompoundTagAt(j)
-                            .getString("uuid");
-                        if (uuidStr != null && !uuidStr.isEmpty()) {
-                            try {
-                                playerSessionMap.put(UUID.fromString(uuidStr), session.sessionId);
-                            } catch (IllegalArgumentException ignored) {}
-                        }
-                    }
                 }
             }
             if (loaded > 0) {

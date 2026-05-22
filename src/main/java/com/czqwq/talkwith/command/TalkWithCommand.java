@@ -319,9 +319,13 @@ public class TalkWithCommand extends CommandBase {
                     return;
                 }
                 if (args[2].equalsIgnoreCase("create")) {
-                    // Optional name: /talkwith session server create [name]
-                    String name = args.length >= 4 ? args[3] : "";
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("server_create", name));
+                    // Name is mandatory: /talkwith session server create <name>
+                    if (args.length < 4 || args[3].trim()
+                        .isEmpty()) {
+                        TextUtils.error(StatCollector.translateToLocal("talkwith.session.name_required"));
+                        return;
+                    }
+                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("server_create", args[3]));
                 } else {
                     TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
                 }

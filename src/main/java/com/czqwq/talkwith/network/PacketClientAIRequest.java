@@ -1,9 +1,9 @@
 package com.czqwq.talkwith.network;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
-import com.czqwq.talkwith.gui.GuiAIChat;
+import com.czqwq.talkwith.ai.AIClient;
 import com.czqwq.talkwith.gui.GuiVanillaChat;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -50,16 +50,31 @@ public class PacketClientAIRequest implements IMessage {
                 if (ClientProxy.useVanillaGui) {
                     // Vanilla mode: route AI call through vanilla chat
                     GuiVanillaChat.injectAndSend(pName, pMsg);
+                } else if (ClientProxy.activeGui != null) {
+                    // GUI is open: inject directly
+                    ClientProxy.activeGui.injectAndSend(pMsg);
                 } else {
-                    // Default mode: ensure GuiAIChat is open and inject into it
-                    if (ClientProxy.activeGui == null) {
-                        Minecraft.getMinecraft()
-                            .displayGuiScreen(new GuiAIChat(""));
-                    }
-                    GuiAIChat gui = ClientProxy.activeGui;
-                    if (gui != null) {
-                        gui.injectAndSend(pMsg);
-                    }
+                    // GUI is not open: perform AI call headlessly, push to shared history,
+                    // and show the reply in vanilla chat so the player is not left in the dark.
+                    ClientProxy.addToChatHistory("§e" + pName + ": §f" + pMsg);
+                    ClientProxy.clientSession.addMessage("user", pMsg);
+                    AIClient.sendAsync(
+                        ClientProxy.clientSession.getMessages(
+                            com.czqwq.talkwith.Config.loadPromptFromFile(com.czqwq.talkwith.Config.clientPromptFile)),
+                        reply -> ClientProxy.scheduleOnMainThread(() -> {
+                            ClientProxy.clientSession.addMessage("assistant", reply);
+                            String replyLine = StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply;
+                            ClientProxy.addToChatHistory(replyLine);
+                            // Also surface in vanilla chat since the GUI is closed
+                            com.czqwq.talkwith.util.TextUtils
+                                .sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), reply);
+                        }),
+                        err -> ClientProxy.scheduleOnMainThread(() -> {
+                            String errLine = StatCollector.translateToLocal("talkwith.chat.error_prefix") + err;
+                            ClientProxy.addToChatHistory(errLine);
+                            com.czqwq.talkwith.util.TextUtils
+                                .error(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
+                        }));
                 }
             });
             return null;

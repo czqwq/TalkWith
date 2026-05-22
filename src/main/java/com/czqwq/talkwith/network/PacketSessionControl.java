@@ -102,13 +102,16 @@ public class PacketSessionControl implements IMessage {
                     player.addChatMessage(err("talkwith.session.already_in"));
                     return null;
                 }
+                // Name is now mandatory — reject empty names on the server side too
                 String proposedName = (msg.target != null) ? msg.target.trim() : "";
-                if (!proposedName.isEmpty()) {
-                    for (SharedSession s : SharedSession.sessions.values()) {
-                        if (proposedName.equals(s.sessionName)) {
-                            player.addChatMessage(errf("talkwith.session.name_taken", proposedName));
-                            return null;
-                        }
+                if (proposedName.isEmpty()) {
+                    player.addChatMessage(err("talkwith.session.name_required"));
+                    return null;
+                }
+                for (SharedSession s : SharedSession.sessions.values()) {
+                    if (proposedName.equals(s.sessionName)) {
+                        player.addChatMessage(errf("talkwith.session.name_taken", proposedName));
+                        return null;
                     }
                 }
                 // Initialise with the server's config defaults so the session works out of the box
@@ -118,12 +121,9 @@ public class PacketSessionControl implements IMessage {
                     Config.baseUrl,
                     Config.apiKey,
                     Config.model);
-                if (!proposedName.isEmpty()) {
-                    newSession.sessionName = proposedName;
-                }
+                newSession.sessionName = proposedName;
                 SharedSession.sessions.put(newSession.sessionId, newSession);
-                String displayName = newSession.sessionName.isEmpty() ? newSession.sessionId : newSession.sessionName;
-                player.addChatMessage(okf("talkwith.session.created", displayName));
+                player.addChatMessage(okf("talkwith.session.created", proposedName));
                 PacketHandler.INSTANCE.sendTo(new PacketOpenGui(newSession.sessionId), player);
                 SessionWorldData.save();
                 return null;
@@ -323,6 +323,7 @@ public class PacketSessionControl implements IMessage {
                     if (session.ownerUuid.equals(playerUuid)) {
                         UUID newOwnerUuid = null;
                         String newOwnerName = null;
+                        // Prefer an online member for immediate notification
                         for (UUID uuid : session.players) {
                             if (!uuid.equals(playerUuid)) {
                                 EntityPlayerMP candidate = getPlayerByUUID(server, uuid);
@@ -333,21 +334,33 @@ public class PacketSessionControl implements IMessage {
                                 }
                             }
                         }
+                        // If no online candidate, pick any offline member so the session survives
+                        if (newOwnerUuid == null) {
+                            for (UUID uuid : session.players) {
+                                if (!uuid.equals(playerUuid)) {
+                                    newOwnerUuid = uuid;
+                                    // Name will be updated when the new owner next logs in
+                                    break;
+                                }
+                            }
+                        }
                         session.players.remove(playerUuid);
                         if (newOwnerUuid != null) {
                             session.ownerUuid = newOwnerUuid;
-                            session.ownerName = newOwnerName;
+                            if (newOwnerName != null) session.ownerName = newOwnerName;
                             SessionWorldData.save();
                             EntityPlayerMP newOwnerPlayer = getPlayerByUUID(server, newOwnerUuid);
                             if (newOwnerPlayer != null) {
                                 newOwnerPlayer.addChatMessage(ok("talkwith.session.owner_transferred"));
                             }
                         } else {
+                            // Owner was the only member: delete the session
                             SharedSession.sessions.remove(session.sessionId);
                             SessionWorldData.save();
                         }
                     } else {
                         session.players.remove(playerUuid);
+                        SessionWorldData.save();
                     }
                     ServerEventHandler.clearPlayerState(playerUuid);
                     player.addChatMessage(ok("talkwith.session.left"));
@@ -361,17 +374,27 @@ public class PacketSessionControl implements IMessage {
                         }
                         SharedSession.sessions.remove(session.sessionId);
                         SessionWorldData.save();
+                        // Notify all members; the owner is included in session.players so
+                        // their PacketOpenGui("") and message are sent from within the loop.
                         for (UUID uuid : session.players) {
                             ServerEventHandler.clearPlayerState(uuid);
                             EntityPlayerMP member = getPlayerByUUID(server, uuid);
                             if (member != null) {
-                                member.addChatMessage(err("talkwith.session.closed"));
+                                if (uuid.equals(playerUuid)) {
+                                    // Owner gets the success message instead of the generic "closed" one
+                                    member.addChatMessage(ok("talkwith.session.delete_ok"));
+                                } else {
+                                    member.addChatMessage(err("talkwith.session.closed"));
+                                }
                                 PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
                             }
                         }
                     }
-                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
-                    player.addChatMessage(ok("talkwith.session.delete_ok"));
+                    // If the owner was not in session.players for some reason, still clear their GUI
+                    if (session == null || !session.players.contains(playerUuid)) {
+                        PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
+                        player.addChatMessage(ok("talkwith.session.delete_ok"));
+                    }
                 }
                 case "setting_model" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {
@@ -421,6 +444,7 @@ public class PacketSessionControl implements IMessage {
                         .func_152612_a(msg.target);
                     if (targetPlayer != null) {
                         session.mutedPlayers.add(targetPlayer.getUniqueID());
+                        SessionWorldData.save();
                         player.addChatMessage(okf("talkwith.session.muted_player", msg.target));
                     }
                 }
@@ -433,6 +457,7 @@ public class PacketSessionControl implements IMessage {
                         .func_152612_a(msg.target);
                     if (targetPlayer != null) {
                         session.mutedPlayers.remove(targetPlayer.getUniqueID());
+                        SessionWorldData.save();
                         player.addChatMessage(okf("talkwith.session.unmuted_player", msg.target));
                     }
                 }
@@ -445,6 +470,7 @@ public class PacketSessionControl implements IMessage {
                         .func_152612_a(msg.target);
                     if (targetPlayer != null) {
                         session.players.remove(targetPlayer.getUniqueID());
+                        SessionWorldData.save();
                         ServerEventHandler.clearPlayerState(targetPlayer.getUniqueID());
                         targetPlayer.addChatMessage(err("talkwith.session.kicked"));
                         PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), targetPlayer);
@@ -471,15 +497,24 @@ public class PacketSessionControl implements IMessage {
                     }
                     SharedSession.sessions.remove(session.sessionId);
                     SessionWorldData.save();
+                    // Notify all members; owner is in session.players so handled in the loop.
                     for (UUID uuid : session.players) {
                         ServerEventHandler.clearPlayerState(uuid);
                         EntityPlayerMP member = getPlayerByUUID(server, uuid);
                         if (member != null) {
-                            member.addChatMessage(err("talkwith.session.closed"));
+                            if (uuid.equals(playerUuid)) {
+                                member.addChatMessage(ok("talkwith.session.close_ok"));
+                            } else {
+                                member.addChatMessage(err("talkwith.session.closed"));
+                            }
                             PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), member);
                         }
                     }
-                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
+                    // If owner is not in session.players for any reason, still clear their GUI
+                    if (!session.players.contains(playerUuid)) {
+                        player.addChatMessage(ok("talkwith.session.close_ok"));
+                        PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
+                    }
                 }
                 case "history_clear" -> {
                     if (!session.ownerUuid.equals(playerUuid)) {

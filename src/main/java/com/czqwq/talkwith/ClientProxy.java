@@ -1,6 +1,8 @@
 package com.czqwq.talkwith;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.common.MinecraftForge;
@@ -43,7 +45,27 @@ public class ClientProxy extends CommonProxy {
      */
     public static boolean useVanillaGui = false;
 
+    /**
+     * Persistent chat history shared across all {@link GuiAIChat} instances.
+     * Survives GUI open/close cycles so that closing the inventory (which closes the GUI)
+     * does not discard the conversation. Capped at {@link #MAX_CHAT_HISTORY} entries.
+     */
+    public static final List<String> chatHistory = new CopyOnWriteArrayList<>();
+    /** Maximum number of lines retained in {@link #chatHistory}. */
+    public static final int MAX_CHAT_HISTORY = 500;
+
     private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
+
+    /**
+     * Appends a line to {@link #chatHistory}, evicting the oldest entry if the cap is exceeded.
+     * Safe to call from any thread; list is a {@link CopyOnWriteArrayList}.
+     */
+    public static void addToChatHistory(String line) {
+        chatHistory.add(line);
+        while (chatHistory.size() > MAX_CHAT_HISTORY) {
+            chatHistory.remove(0);
+        }
+    }
 
     public static void scheduleOnMainThread(Runnable r) {
         mainThreadTasks.add(r);
@@ -90,5 +112,6 @@ public class ClientProxy extends CommonProxy {
         isSingleOverride = false;
         isTakeover = false;
         takeoverChatMode = "ai";
+        chatHistory.clear();
     }
 }

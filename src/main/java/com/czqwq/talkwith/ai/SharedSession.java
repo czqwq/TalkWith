@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SharedSession {
 
@@ -43,6 +44,12 @@ public class SharedSession {
     public volatile boolean isPublic = true;
     /** Pending invitations for private sessions. Consumed (removed) when the player joins. */
     public final Set<UUID> invitedPlayers = new CopyOnWriteArraySet<>();
+    /**
+     * Guards against concurrent AI requests for the same session.
+     * Set to {@code true} when an AI request is in-flight; cleared in the reply/error callback.
+     * Use {@code compareAndSet(false, true)} before dispatching a new request.
+     */
+    public final AtomicBoolean isProcessing = new AtomicBoolean(false);
 
     /**
      * Ring-buffer of recent [playerName, playerMsg, aiReply] triples.

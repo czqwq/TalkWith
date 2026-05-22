@@ -69,21 +69,33 @@ public class PacketSessionBroadcast implements IMessage {
                     } else {
                         GuiVanillaChat.appendReply(pn, pm, ar);
                     }
+                    return;
+                }
+
+                // Always persist to shared history so future GUI opens can show the message
+                if (err) {
+                    ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.error_prefix") + ar);
                 } else {
-                    GuiAIChat gui = ClientProxy.activeGui;
-                    if (err) {
-                        if (gui != null) {
-                            gui.appendError(ar);
-                        } else {
-                            TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
-                        }
+                    ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
+                    ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + ar);
+                }
+
+                GuiAIChat gui = ClientProxy.activeGui;
+                if (err) {
+                    if (gui != null) {
+                        // Data already in chatHistory; just clear isThinking
+                        gui.appendError(ar);
                     } else {
-                        if (gui != null) {
-                            gui.appendReply(pn, pm, ar);
-                        } else {
-                            TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
-                            TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
-                        }
+                        TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
+                    }
+                } else {
+                    if (gui != null) {
+                        // Data already in chatHistory; just scroll and clear isThinking
+                        gui.appendReply(pn, pm, ar);
+                    } else {
+                        // GUI is not open: also notify via vanilla chat so the player sees the reply
+                        TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
+                        TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
                     }
                 }
             });
