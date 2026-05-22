@@ -309,16 +309,6 @@ public class PacketSessionControl implements IMessage {
                     ServerEventHandler.singleModeOverride.remove(playerUuid);
                     player.addChatMessage(ok("talkwith.switch.multi.ok"));
                 }
-                case "single" -> {
-                    session.players.remove(playerUuid);
-                    if (session.players.isEmpty() || session.ownerUuid.equals(playerUuid)) {
-                        SharedSession.sessions.remove(session.sessionId);
-                        SessionWorldData.save();
-                    }
-                    ServerEventHandler.clearPlayerState(playerUuid);
-                    player.addChatMessage(ok("talkwith.session.left"));
-                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(""), player);
-                }
                 case "leave" -> {
                     if (session.ownerUuid.equals(playerUuid)) {
                         UUID newOwnerUuid = null;

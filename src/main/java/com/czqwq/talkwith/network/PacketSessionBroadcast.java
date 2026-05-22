@@ -62,8 +62,26 @@ public class PacketSessionBroadcast implements IMessage {
             final String ar = msg.aiReply;
             final boolean err = msg.isError;
             ClientProxy.scheduleOnMainThread(() -> {
+                GuiAIChat gui = ClientProxy.activeGui;
+
+                // If the GUI is explicitly open, always route to it — even when useVanillaGui is true.
+                // This covers the case where the player opened the GUI while still in vanilla mode.
+                if (gui != null) {
+                    // Also persist to shared history so future GUI opens can show the message
+                    if (err) {
+                        ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.error_prefix") + ar);
+                        gui.appendError(ar);
+                    } else {
+                        ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
+                        ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + ar);
+                        gui.appendReply(pn, pm, ar);
+                    }
+                    return;
+                }
+
+                // GUI is not open.
                 if (ClientProxy.useVanillaGui) {
-                    // Vanilla mode: skip activeGui check, route directly to vanilla chat
+                    // Vanilla mode: route directly to vanilla chat (no chatHistory update)
                     if (err) {
                         GuiVanillaChat.appendError(ar);
                     } else {
@@ -72,31 +90,15 @@ public class PacketSessionBroadcast implements IMessage {
                     return;
                 }
 
-                // Always persist to shared history so future GUI opens can show the message
+                // Default mode but GUI is closed: persist and notify via vanilla chat as fallback.
                 if (err) {
                     ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.error_prefix") + ar);
+                    TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
                 } else {
                     ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
                     ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + ar);
-                }
-
-                GuiAIChat gui = ClientProxy.activeGui;
-                if (err) {
-                    if (gui != null) {
-                        // Data already in chatHistory; just clear isThinking
-                        gui.appendError(ar);
-                    } else {
-                        TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
-                    }
-                } else {
-                    if (gui != null) {
-                        // Data already in chatHistory; just scroll and clear isThinking
-                        gui.appendReply(pn, pm, ar);
-                    } else {
-                        // GUI is not open: also notify via vanilla chat so the player sees the reply
-                        TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
-                        TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
-                    }
+                    TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
+                    TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
                 }
             });
             return null;

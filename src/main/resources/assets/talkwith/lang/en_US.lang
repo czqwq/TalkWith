@@ -1,4 +1,4 @@
-talkwith.command.usage=Usage: /talkwith <config|status|history|session|switch|takeover|chat|gui>
+talkwith.command.usage=Usage: /talkwith <config|status|history|session|switch|takeover|chat|gui|open>
 talkwith.config.saved=Configuration saved.
 talkwith.config.reloaded=Configuration reloaded.
 talkwith.api.pinging=Pinging API...
@@ -139,7 +139,8 @@ talkwith.gui.mode.default=GUI Mode: §aCustom GUI (GuiAIChat)§r
 talkwith.gui.mode.vanilla=GUI Mode: §eVanilla Chat§r
 talkwith.gui.switched_default=Switched to §aCustom GUI mode§r.
 talkwith.gui.switched_vanilla=Switched to §eVanilla Chat mode§r.
-talkwith.gui.session_joined=Joined session §e%s§r. Type /talkwith gui default to open the dedicated GUI.
-talkwith.gui.usage=Usage: /talkwith gui <default|vanilla>
+talkwith.gui.session_joined=Joined session §e%s§r. Type /talkwith open to reopen the GUI at any time.
+talkwith.gui.usage=Usage: /talkwith gui <default|vanilla|open>
+talkwith.session.processing=AI is currently processing a request. Please wait.
 talkwith.gui.scroll_hint=§7▲ %s more
 talkwith.status.gui_mode=GUI: %s

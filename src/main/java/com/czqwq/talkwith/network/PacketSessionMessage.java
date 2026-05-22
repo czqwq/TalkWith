@@ -79,6 +79,10 @@ public class PacketSessionMessage implements IMessage {
                 player.addChatMessage(errf("talkwith.session.cooldown", remaining));
                 return null;
             }
+            if (!session.isProcessing.compareAndSet(false, true)) {
+                player.addChatMessage(err("talkwith.session.processing"));
+                return null;
+            }
 
             session.session.addMessage("user", playerName + ": " + msg.message);
             MinecraftServer server = MinecraftServer.getServer();
@@ -95,10 +99,14 @@ public class PacketSessionMessage implements IMessage {
                     session.lastReplyTime = System.currentTimeMillis();
                     session.lastActivity = session.lastReplyTime;
                     session.addRecentMessage(playerName, msg.message, reply);
+                    session.isProcessing.set(false);
                     SessionWorldData.save();
                     ServerEventHandler.broadcastToSession(session, playerName, msg.message, reply, server);
                 },
-                error -> ServerEventHandler.broadcastErrorToSession(session, error, server));
+                error -> {
+                    session.isProcessing.set(false);
+                    ServerEventHandler.broadcastErrorToSession(session, error, server);
+                });
             return null;
         }
     }

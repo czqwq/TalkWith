@@ -130,6 +130,17 @@ public class ServerEventHandler {
         String playerName = player.getCommandSenderName();
 
         boolean hasPrefix = msg.startsWith("> ");
+        String textContent = hasPrefix ? msg.substring(2)
+            .trim() : msg.trim();
+
+        // Special "gui" shortcut — works with or without the "> " prefix.
+        // Opens GuiAIChat on the client (or sends a PacketOpenGui for session context).
+        if (textContent.equalsIgnoreCase("gui")) {
+            event.setCanceled(true);
+            openGuiForPlayer(player, playerUuid, playerName);
+            return;
+        }
+
         boolean hasTakeover = takeoverPlayers.contains(playerUuid);
 
         // Let normal chat through if neither prefix nor takeover
@@ -157,6 +168,34 @@ public class ServerEventHandler {
         } else {
             // "ai" (default)
             routeToAI(player, playerUuid, playerName, msg);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GUI shortcut helper
+    // -------------------------------------------------------------------------
+
+    /**
+     * Opens {@link com.czqwq.talkwith.gui.GuiAIChat} on the client.
+     * If the player is in a session (and not in single-override mode), sends a
+     * {@link PacketOpenGui} with the session ID. Otherwise sends a
+     * {@link PacketClientAIRequest} with an empty message, which the client handler
+     * interprets as "just open the GUI".
+     */
+    private void openGuiForPlayer(EntityPlayerMP player, UUID playerUuid, String playerName) {
+        SharedSession foundSession = null;
+        for (SharedSession s : SharedSession.sessions.values()) {
+            if (s.hasPlayer(playerUuid)) {
+                foundSession = s;
+                break;
+            }
+        }
+        boolean useLocalAI = (foundSession == null) || singleModeOverride.contains(playerUuid);
+        if (!useLocalAI) {
+            PacketHandler.INSTANCE.sendTo(new com.czqwq.talkwith.network.PacketOpenGui(foundSession.sessionId), player);
+        } else {
+            // PacketClientAIRequest with empty message signals "open GUI, no AI call"
+            PacketHandler.INSTANCE.sendTo(new PacketClientAIRequest(playerName, ""), player);
         }
     }
 
@@ -198,11 +237,9 @@ public class ServerEventHandler {
 
             // Prevent concurrent AI requests for the same session (race condition guard)
             if (!session.isProcessing.compareAndSet(false, true)) {
-                long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
-                    / 1000 + 1;
                 player.addChatMessage(
                     new ChatComponentText("§c[TalkWith]§r ")
-                        .appendSibling(new ChatComponentTranslation("talkwith.session.cooldown", remaining)));
+                        .appendSibling(new ChatComponentTranslation("talkwith.session.processing")));
                 return;
             }
 

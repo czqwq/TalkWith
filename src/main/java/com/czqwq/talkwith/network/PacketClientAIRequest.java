@@ -47,6 +47,12 @@ public class PacketClientAIRequest implements IMessage {
             final String pName = msg.playerName;
             final String pMsg = msg.message;
             ClientProxy.scheduleOnMainThread(() -> {
+                // Empty message is a "gui open" signal — just open the GUI, no AI call.
+                if (pMsg == null || pMsg.isEmpty()) {
+                    com.czqwq.talkwith.command.TalkWithCommand.openGui();
+                    return;
+                }
+
                 if (ClientProxy.useVanillaGui) {
                     // Vanilla mode: route AI call through vanilla chat
                     GuiVanillaChat.injectAndSend(pName, pMsg);

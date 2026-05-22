@@ -34,6 +34,25 @@ public class TalkWithCommand extends CommandBase {
         return StatCollector.translateToLocal("talkwith.command.usage");
     }
 
+    /**
+     * Opens {@link GuiAIChat} if it is not already open and the GUI mode is not vanilla.
+     * Also switches from vanilla mode to default mode so the GUI actually receives messages.
+     * Used by both {@code /talkwith open} and the {@code "gui"} chat shortcut.
+     */
+    public static void openGui() {
+        if (ClientProxy.useVanillaGui) {
+            // Silently switch to default mode so the GUI works correctly
+            ClientProxy.useVanillaGui = false;
+            Config.guiMode = "default";
+            Config.save();
+            TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_default"));
+        }
+        if (ClientProxy.activeGui == null) {
+            Minecraft.getMinecraft()
+                .displayGuiScreen(new GuiAIChat(""));
+        }
+    }
+
     private static boolean serverFeatureAvailable() {
         return ClientProxy.serverHasMod || Minecraft.getMinecraft()
             .isIntegratedServerRunning();
@@ -176,6 +195,7 @@ public class TalkWithCommand extends CommandBase {
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("chat_mode", mode));
             }
             case "gui" -> handleGui(sender, args);
+            case "open" -> openGui();
             default -> TextUtils
                 .error(StatCollector.translateToLocalFormatted("talkwith.unknown_sub", getCommandUsage(sender)));
         }
@@ -451,10 +471,8 @@ public class TalkWithCommand extends CommandBase {
 
     private void handleGui(ICommandSender sender, String[] args) {
         if (args.length < 2) {
-            // Show current mode
-            TextUtils.info(
-                StatCollector.translateToLocal(
-                    ClientProxy.useVanillaGui ? "talkwith.gui.mode.vanilla" : "talkwith.gui.mode.default"));
+            // No sub-command: open the GUI (same as /talkwith open)
+            openGui();
             return;
         }
         switch (args[1].toLowerCase()) {
@@ -480,6 +498,7 @@ public class TalkWithCommand extends CommandBase {
                         .displayGuiScreen(null);
                 }
             }
+            case "open" -> openGui();
             default -> TextUtils.error(StatCollector.translateToLocal("talkwith.gui.usage"));
         }
     }
@@ -501,7 +520,8 @@ public class TalkWithCommand extends CommandBase {
                 "switch",
                 "takeover",
                 "chat",
-                "gui");
+                "gui",
+                "open");
         }
         if (args.length == 2) {
             switch (args[0].toLowerCase()) {
@@ -545,7 +565,7 @@ public class TalkWithCommand extends CommandBase {
                 case "chat":
                     return getListOfStringsMatchingLastWord(args, "group", "public", "ai");
                 case "gui":
-                    return getListOfStringsMatchingLastWord(args, "default", "vanilla");
+                    return getListOfStringsMatchingLastWord(args, "default", "vanilla", "open");
             }
         }
         if (args.length == 3) {

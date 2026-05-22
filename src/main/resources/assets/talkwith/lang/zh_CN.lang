@@ -1,4 +1,4 @@
-talkwith.command.usage=用法: /talkwith <config|status|history|session|switch|takeover|chat|gui>
+talkwith.command.usage=用法: /talkwith <config|status|history|session|switch|takeover|chat|gui|open>
 talkwith.config.saved=配置已保存。
 talkwith.config.reloaded=配置已重载。
 talkwith.api.pinging=正在测试 API 连接...
@@ -137,7 +137,8 @@ talkwith.gui.mode.default=GUI 模式：§a自定义界面 (GuiAIChat)§r
 talkwith.gui.mode.vanilla=GUI 模式：§e原版聊天栏§r
 talkwith.gui.switched_default=已切换到§a自定义界面模式§r。
 talkwith.gui.switched_vanilla=已切换到§e原版聊天栏模式§r。
-talkwith.gui.session_joined=已加入会话 §e%s§r。输入 /talkwith gui default 打开专属 GUI。
-talkwith.gui.usage=用法：/talkwith gui <default|vanilla>
+talkwith.gui.session_joined=已加入会话 §e%s§r。随时输入 /talkwith open 重新打开 GUI。
+talkwith.gui.usage=用法：/talkwith gui <default|vanilla|open>
+talkwith.session.processing=AI 正在处理请求中，请稍候。
 talkwith.gui.scroll_hint=§7▲ %s 行
 talkwith.status.gui_mode=GUI：%s

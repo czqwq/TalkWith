@@ -79,6 +79,23 @@ public class SessionWorldData extends WorldSavedData {
                 if (session != null) {
                     SharedSession.sessions.put(session.sessionId, session);
                     loaded++;
+
+                    // Rebuild playerSessionMap from the "players" sub-tag as a fallback
+                    // for crash recovery (when onPlayerLogout never fired for these players).
+                    if (entry.hasKey("players")) {
+                        NBTTagList playersList = entry.getTagList("players", NBT_COMPOUND);
+                        for (int j = 0; j < playersList.tagCount(); j++) {
+                            String uuidStr = playersList.getCompoundTagAt(j)
+                                .getString("uuid");
+                            if (uuidStr != null && !uuidStr.isEmpty()) {
+                                try {
+                                    UUID pUuid = UUID.fromString(uuidStr);
+                                    // putIfAbsent: the explicit playerSessions map takes precedence
+                                    playerSessionMap.putIfAbsent(pUuid, session.sessionId);
+                                } catch (IllegalArgumentException ignored) {}
+                            }
+                        }
+                    }
                 }
             }
             if (loaded > 0) {
