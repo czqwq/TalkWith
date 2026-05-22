@@ -28,6 +28,10 @@ public class PacketSessionBroadcast implements IMessage {
     /** Inverse of {@link #writeString}. */
     private static String readString(ByteBuf buf) {
         int len = buf.readInt();
+        // Guard against corrupted or malicious packets
+        if (len < 0 || len > 10 * 1024 * 1024) {
+            throw new IllegalStateException("PacketSessionBroadcast: string length out of range: " + len);
+        }
         if (len == 0) return "";
         byte[] bytes = new byte[len];
         buf.readBytes(bytes);
