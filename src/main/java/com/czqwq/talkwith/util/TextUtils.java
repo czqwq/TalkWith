@@ -1,5 +1,10 @@
 package com.czqwq.talkwith.util;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.ChatComponentText;
 
@@ -18,6 +23,17 @@ public class TextUtils {
 
     /** First printable ASCII character — used to filter raw control characters from AI output. */
     private static final char MIN_PRINTABLE_CHAR = 0x20;
+
+    /**
+     * Splits an AI reply into natural sentence segments.
+     *
+     * <p>
+     * Segments end at Chinese/Japanese terminal punctuation (。？！), or at a newline if no
+     * punctuation is found on the line. Each segment is trimmed before display, removing any
+     * leading/trailing spaces that the model may have inserted.
+     * </p>
+     */
+    private static final Pattern SENTENCE_SPLIT = Pattern.compile(".*?[。？！]+|.+$", Pattern.MULTILINE);
 
     public static void addChatMessage(String msg) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -121,20 +137,25 @@ public class TextUtils {
             }
         }
 
-        // Split on newlines
-        String[] parts = sb.toString()
-            .split("\n", -1);
-        boolean firstMsg = true;
-        for (String rawLine : parts) {
-            if (rawLine.isEmpty()) continue;
-            String line = rawLine;
+        // Split into natural sentence segments ending at 。？！ (or full line if no punctuation).
+        // Trimming each segment removes leading/trailing spaces the model may have added.
+        List<String> segments = new ArrayList<>();
+        Matcher matcher = SENTENCE_SPLIT.matcher(sb.toString());
+        while (matcher.find()) {
+            String seg = matcher.group()
+                .trim();
+            if (!seg.isEmpty()) {
+                segments.add(seg);
+            }
+        }
 
-            // For the first segment the prefix is prepended, so the available width is
-            // narrower; continuation lines use "§7 §r" (2 visible spaces).
+        boolean firstMsg = true;
+        for (String segment : segments) {
             String prefix = firstMsg ? linePrefix : "§7  §r";
             int availWidth = MAX_VISUAL_WIDTH - visualWidth(prefix);
+            String line = segment;
 
-            // Chunk excessively long lines using visual width so CJK double-width
+            // Chunk excessively long segments using visual width so CJK double-width
             // characters are counted correctly (each CJK char = 2 width units).
             while (visualWidth(line) > availWidth) {
                 int cut = findVisualCut(line, availWidth);

@@ -1,5 +1,7 @@
 package com.czqwq.talkwith.ai;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -13,6 +15,7 @@ import com.czqwq.talkwith.Config;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonSyntaxException;
 
 public class AIClient {
 
@@ -59,15 +62,63 @@ public class AIClient {
                 }
 
                 int status = conn.getResponseCode();
-                String responseText;
-                if (status >= 200 && status < 300) {
-                    responseText = new String(readStream(conn.getInputStream()), StandardCharsets.UTF_8);
-                } else {
-                    responseText = new String(readStream(conn.getErrorStream()), StandardCharsets.UTF_8);
-                    onError.accept("HTTP " + status + ": " + responseText);
+                if (status < 200 || status >= 300) {
+                    String errorText = new String(readStream(conn.getErrorStream()), StandardCharsets.UTF_8);
+                    onError.accept("HTTP " + status + ": " + errorText);
                     return;
                 }
 
+                // Read line-by-line to support both SSE/streaming and regular JSON responses.
+                // SSE lines have the form "data: {...}" or "data: [DONE]".
+                StringBuilder accumulated = new StringBuilder();
+                boolean isSSE = false;
+                StringBuilder jsonBuffer = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    String ln;
+                    while ((ln = reader.readLine()) != null) {
+                        if (ln.startsWith("data: ")) {
+                            isSSE = true;
+                            String data = ln.substring(6)
+                                .trim();
+                            if ("[DONE]".equals(data)) break;
+                            try {
+                                JsonObject chunk = GSON.fromJson(data, JsonObject.class);
+                                if (chunk != null && chunk.has("choices")) {
+                                    JsonArray choices = chunk.getAsJsonArray("choices");
+                                    if (choices != null && choices.size() > 0) {
+                                        JsonObject delta = choices.get(0)
+                                            .getAsJsonObject()
+                                            .getAsJsonObject("delta");
+                                        if (delta != null && delta.has("content")
+                                            && !delta.get("content")
+                                                .isJsonNull()) {
+                                            accumulated.append(
+                                                delta.get("content")
+                                                    .getAsString());
+                                        }
+                                    }
+                                }
+                            } catch (JsonSyntaxException ignored) {}
+                        } else if (!isSSE && !ln.isEmpty()) {
+                            jsonBuffer.append(ln);
+                        }
+                    }
+                }
+
+                if (isSSE) {
+                    String content = accumulated.toString()
+                        .trim();
+                    if (content.isEmpty()) {
+                        onError.accept("Streaming completed but no content was received");
+                    } else {
+                        onSuccess.accept(content);
+                    }
+                    return;
+                }
+
+                // Non-streaming path: parse the full JSON blob.
+                String responseText = jsonBuffer.toString();
                 JsonObject responseJson = GSON.fromJson(responseText, JsonObject.class);
                 if (responseJson == null || !responseJson.has("choices")
                     || responseJson.getAsJsonArray("choices")
@@ -83,9 +134,9 @@ public class AIClient {
                     onError.accept("Missing message.content in response");
                     return;
                 }
-                String content = message.get("content")
-                    .getAsString();
-                onSuccess.accept(content);
+                onSuccess.accept(
+                    message.get("content")
+                        .getAsString());
             } catch (Exception e) {
                 onError.accept(
                     e.getMessage() != null ? e.getMessage()
