@@ -67,6 +67,9 @@ public class TextUtils {
 
     private static boolean isWideChar(char c) {
         return (c >= 0x1100 && c <= 0x115F) // Hangul Jamo
+            || (c >= 0x2013 && c <= 0x2014) // en-dash, em-dash (wide in MC unicode font)
+            || (c >= 0x2018 && c <= 0x201D) // curly quotes ' ' " " (wide in MC unicode font)
+            || c == 0x2026 // horizontal ellipsis … (wide in MC unicode font)
             || (c >= 0x2E80 && c <= 0x303F) // CJK Radicals / Kangxi
             || (c >= 0x3040 && c <= 0x33FF) // Japanese kana + misc CJK
             || (c >= 0x3400 && c <= 0x4DBF) // CJK Extension A

@@ -59,8 +59,17 @@ public class ServerEventHandler {
         // Announce the mod is present on this server
         PacketHandler.INSTANCE.sendTo(new PacketHandshake(), player);
 
+        // Defensively ensure sessions are loaded from disk before trying to restore.
+        // On integrated-server worlds the WorldEvent.Load and PlayerLoggedInEvent can fire
+        // in rapid succession; calling restore() here is idempotent (MapStorage caches the
+        // result) and guarantees sessions are available regardless of event ordering.
+        SessionWorldData.restore();
+
         // Restore previous session if the player disconnected while in one.
         // Use a silent packet so the GUI does not auto-open on every login.
+        // Atomically remove the mapping so no other thread can race on it.
+        // If the session is not found (stale mapping after a crash), the entry
+        // is intentionally dropped — restore() above already loaded fresh data.
         String lastSessionId = SessionWorldData.playerSessionMap.remove(playerUuid);
         if (lastSessionId != null) {
             SharedSession session = SharedSession.sessions.get(lastSessionId);

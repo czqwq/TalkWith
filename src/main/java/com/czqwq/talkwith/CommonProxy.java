@@ -65,6 +65,14 @@ public class CommonProxy {
         FMLCommonHandler.instance()
             .bus()
             .register(serverEventHandler);
+
+        // In single-player (integrated server) WorldEvent.Load fires BEFORE
+        // FMLServerStartingEvent, so the handler above misses the initial world load.
+        // Calling restore() here ensures sessions are always loaded when the server is
+        // ready. On a dedicated server the overworld is not yet loaded at this point
+        // (worldServers[0] is null), so get() returns null and this is a no-op — the
+        // onWorldLoad handler will fire later and handle it correctly.
+        SessionWorldData.restore();
     }
 
     /**

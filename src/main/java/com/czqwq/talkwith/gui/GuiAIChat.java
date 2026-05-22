@@ -9,6 +9,7 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.util.StatCollector;
 
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import com.czqwq.talkwith.ClientProxy;
@@ -201,7 +202,24 @@ public class GuiAIChat extends GuiScreen {
             single.add(text);
             return single;
         }
-        return fontRendererObj.listFormattedStringToWidth(text, maxWidth);
+        List<String> wrapped = fontRendererObj.listFormattedStringToWidth(text, maxWidth);
+        // Defensive fallback: if the FontRenderer produced only empty/null segments
+        // (a known issue when lines contain full-width characters such as （）),
+        // return the original line unsplit so it is at least rendered rather than
+        // silently becoming a blank display row.
+        boolean allEmpty = true;
+        for (String s : wrapped) {
+            if (s != null && !s.isEmpty()) {
+                allEmpty = false;
+                break;
+            }
+        }
+        if (allEmpty) {
+            List<String> fallback = new ArrayList<>();
+            fallback.add(text);
+            return fallback;
+        }
+        return wrapped;
     }
 
     @Override
@@ -338,6 +356,24 @@ public class GuiAIChat extends GuiScreen {
             // Scroll up (wheel > 0) increases offset (shows older lines)
             scrollOffset += wheel > 0 ? 1 : -1;
         }
+    }
+
+    /**
+     * InputFix-style patch: vanilla {@code GuiScreen.handleKeyboardInput} only fires
+     * {@link #keyTyped} when {@code Keyboard.getEventKeyState()} is {@code true}, which
+     * means IME-composed characters (keyCode 0, keyState false) are silently dropped.
+     * Full-width symbols like （ ） from a Chinese IME are composed this way.
+     * We intercept these events and forward them to {@link #keyTyped} before delegating
+     * the rest of the work to {@code super}, which handles normal keys and housekeeping.
+     */
+    @Override
+    public void handleKeyboardInput() {
+        char c = Keyboard.getEventCharacter();
+        int k = Keyboard.getEventKey();
+        if (!Keyboard.getEventKeyState() && k == 0 && Character.isDefined(c)) {
+            keyTyped(c, k);
+        }
+        super.handleKeyboardInput();
     }
 
     @Override
