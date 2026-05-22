@@ -135,12 +135,26 @@ public class TalkWithCommand extends CommandBase {
                     return;
                 }
                 if (args[1].equalsIgnoreCase("clear")) {
-                    ClientProxy.clientSession.clear();
-                    TextUtils.info(StatCollector.translateToLocal("talkwith.history.cleared"));
-                } else if (args[1].equalsIgnoreCase("show")) {
-                    TextUtils.info(
-                        StatCollector
-                            .translateToLocalFormatted("talkwith.history.show", ClientProxy.clientSession.size()));
+                    if (isMultiMode()) {
+                        // Multi-player mode: clear the server-side session AI history
+                        PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("history_clear", ""));
+                    } else {
+                        // Single-player mode: clear the local conversation history
+                        ClientProxy.clientSession.clear();
+                        TextUtils.info(StatCollector.translateToLocal("talkwith.history.cleared"));
+                    }
+                } else if (args[1].equalsIgnoreCase("list") || args[1].equalsIgnoreCase("show")) {
+                    if (isMultiMode()) {
+                        // Multi-player mode: show the count of lines in the local chat display buffer
+                        TextUtils.info(
+                            StatCollector
+                                .translateToLocalFormatted("talkwith.history.show", ClientProxy.chatHistory.size()));
+                    } else {
+                        // Single-player mode: show the local conversation message count
+                        TextUtils.info(
+                            StatCollector
+                                .translateToLocalFormatted("talkwith.history.show", ClientProxy.clientSession.size()));
+                    }
                 } else {
                     TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.history.unknown", args[1]));
                 }

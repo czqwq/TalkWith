@@ -85,7 +85,7 @@ talkwith.switch.usage=用法：/talkwith switch <single|multi>
 talkwith.switch.not_in_session=你当前没有加入任何会话。请先使用 /talkwith session join 加入。
 talkwith.switch.single.ok=已切换到 §e单人模式§r。你的">"消息将发送给本地 AI。
 talkwith.switch.multi.ok=已切换到 §a多人模式§r。你的">"消息将发送给共享会话 AI。
-talkwith.history.usage=用法：/talkwith history <clear|show>
+talkwith.history.usage=用法：/talkwith history <clear|list>
 # 接管模式
 talkwith.takeover.enabled=接管模式已 §a开启§r。聊天模式：§e%s§r。使用 /talkwith chat <group|public|ai> 切换模式。
 talkwith.takeover.disabled=接管模式已 §c关闭§r。恢复正常聊天。

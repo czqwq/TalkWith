@@ -7,13 +7,32 @@ import com.czqwq.talkwith.gui.GuiAIChat;
 import com.czqwq.talkwith.gui.GuiVanillaChat;
 import com.czqwq.talkwith.util.TextUtils;
 
-import cpw.mods.fml.common.network.ByteBufUtils;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
 import cpw.mods.fml.common.network.simpleimpl.IMessageHandler;
 import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
 
 public class PacketSessionBroadcast implements IMessage {
+
+    /**
+     * Writes a string to a {@link ByteBuf} using a 4-byte length prefix followed by
+     * the UTF-8 encoded bytes. Unlike {@code ByteBufUtils.writeUTF8String}, this
+     * supports strings up to ~2 GB and will not throw on long AI replies.
+     */
+    private static void writeString(ByteBuf buf, String s) {
+        byte[] bytes = (s != null ? s : "").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        buf.writeInt(bytes.length);
+        buf.writeBytes(bytes);
+    }
+
+    /** Inverse of {@link #writeString}. */
+    private static String readString(ByteBuf buf) {
+        int len = buf.readInt();
+        if (len == 0) return "";
+        byte[] bytes = new byte[len];
+        buf.readBytes(bytes);
+        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+    }
 
     public String playerName;
     public String playerMsg;
@@ -57,18 +76,18 @@ public class PacketSessionBroadcast implements IMessage {
 
     @Override
     public void fromBytes(ByteBuf buf) {
-        playerName = ByteBufUtils.readUTF8String(buf);
-        playerMsg = ByteBufUtils.readUTF8String(buf);
-        aiReply = ByteBufUtils.readUTF8String(buf);
+        playerName = readString(buf);
+        playerMsg = readString(buf);
+        aiReply = readString(buf);
         isError = buf.readBoolean();
         historyOnly = buf.readBoolean();
     }
 
     @Override
     public void toBytes(ByteBuf buf) {
-        ByteBufUtils.writeUTF8String(buf, playerName);
-        ByteBufUtils.writeUTF8String(buf, playerMsg);
-        ByteBufUtils.writeUTF8String(buf, aiReply);
+        writeString(buf, playerName);
+        writeString(buf, playerMsg);
+        writeString(buf, aiReply);
         buf.writeBoolean(isError);
         buf.writeBoolean(historyOnly);
     }

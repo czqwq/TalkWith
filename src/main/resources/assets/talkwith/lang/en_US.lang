@@ -87,7 +87,7 @@ talkwith.switch.usage=Usage: /talkwith switch <single|multi>
 talkwith.switch.not_in_session=You are not in any session. Join one first with /talkwith session join.
 talkwith.switch.single.ok=Switched to §eSingle Mode§r. Your ">" messages go to your local AI.
 talkwith.switch.multi.ok=Switched to §aMulti-player Mode§r. Your ">" messages go to the shared session AI.
-talkwith.history.usage=Usage: /talkwith history <clear|show>
+talkwith.history.usage=Usage: /talkwith history <clear|list>
 # Takeover mode
 talkwith.takeover.enabled=Takeover mode §aON§r. Chat mode: §e%s§r. Use /talkwith chat <group|public|ai> to switch.
 talkwith.takeover.disabled=Takeover mode §cOFF§r. Normal chat restored.
