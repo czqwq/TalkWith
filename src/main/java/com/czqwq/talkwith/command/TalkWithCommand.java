@@ -38,6 +38,14 @@ public class TalkWithCommand extends CommandBase {
      * Opens {@link GuiAIChat} if it is not already open and the GUI mode is not vanilla.
      * Also switches from vanilla mode to default mode so the GUI actually receives messages.
      * Used by both {@code /talkwith open} and the {@code "gui"} chat shortcut.
+     *
+     * <p>
+     * The {@link Minecraft#displayGuiScreen} call is deferred to the next client tick via
+     * {@link ClientProxy#scheduleOnMainThread}. This is necessary because this method is
+     * invoked from within {@code ClientCommandHandler} while the chat screen's key-handler
+     * is still executing: without the deferral the chat screen's subsequent
+     * {@code mc.displayGuiScreen(null)} call would immediately close the GUI we just opened.
+     * </p>
      */
     public static void openGui() {
         if (ClientProxy.useVanillaGui) {
@@ -47,10 +55,13 @@ public class TalkWithCommand extends CommandBase {
             Config.save();
             TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_default"));
         }
-        if (ClientProxy.activeGui == null) {
-            Minecraft.getMinecraft()
-                .displayGuiScreen(new GuiAIChat(""));
-        }
+        // Defer opening to the next tick so the chat screen finishes closing first.
+        ClientProxy.scheduleOnMainThread(() -> {
+            if (ClientProxy.activeGui == null) {
+                Minecraft.getMinecraft()
+                    .displayGuiScreen(new GuiAIChat(""));
+            }
+        });
     }
 
     private static boolean serverFeatureAvailable() {
@@ -481,10 +492,15 @@ public class TalkWithCommand extends CommandBase {
                 Config.guiMode = "default";
                 Config.save();
                 TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_default"));
-                // If the player is in a session and the GUI is not open, open it
+                // If the player is in a session and the GUI is not open, open it.
+                // Defer to the next tick for the same reason as openGui() (see its Javadoc).
                 if (ClientProxy.currentSessionId != null && ClientProxy.activeGui == null) {
-                    Minecraft.getMinecraft()
-                        .displayGuiScreen(new GuiAIChat(""));
+                    ClientProxy.scheduleOnMainThread(() -> {
+                        if (ClientProxy.activeGui == null) {
+                            Minecraft.getMinecraft()
+                                .displayGuiScreen(new GuiAIChat(""));
+                        }
+                    });
                 }
             }
             case "vanilla" -> {

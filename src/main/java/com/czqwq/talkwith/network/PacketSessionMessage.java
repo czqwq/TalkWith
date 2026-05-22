@@ -4,9 +4,7 @@ import java.util.UUID;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.ChatComponentText;
-import net.minecraft.util.ChatComponentTranslation;
-import net.minecraft.util.IChatComponent;
+import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ServerEventHandler;
@@ -44,14 +42,6 @@ public class PacketSessionMessage implements IMessage {
         ByteBufUtils.writeUTF8String(buf, message);
     }
 
-    private static IChatComponent err(String key) {
-        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key));
-    }
-
-    private static IChatComponent errf(String key, Object... args) {
-        return new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(key, args));
-    }
-
     public static class Handler implements IMessageHandler<PacketSessionMessage, IMessage> {
 
         @Override
@@ -62,25 +52,37 @@ public class PacketSessionMessage implements IMessage {
 
             SharedSession session = SharedSession.sessions.get(msg.sessionId);
             if (session == null) {
-                player.addChatMessage(err("talkwith.session.not_found"));
+                // Route through PacketSessionBroadcast so the GUI clears the thinking indicator.
+                PacketHandler.INSTANCE.sendTo(
+                    PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.not_found")),
+                    player);
                 return null;
             }
             if (!session.hasPlayer(playerUuid)) {
-                player.addChatMessage(err("talkwith.session.not_in_session"));
+                PacketHandler.INSTANCE.sendTo(
+                    PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.not_in_session")),
+                    player);
                 return null;
             }
             if (session.isMuted(playerUuid)) {
-                player.addChatMessage(err("talkwith.session.muted"));
+                PacketHandler.INSTANCE.sendTo(
+                    PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.muted")),
+                    player);
                 return null;
             }
             if (session.isCooldownActive()) {
                 long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
                     / 1000 + 1;
-                player.addChatMessage(errf("talkwith.session.cooldown", remaining));
+                PacketHandler.INSTANCE.sendTo(
+                    PacketSessionBroadcast
+                        .error(StatCollector.translateToLocalFormatted("talkwith.session.cooldown", remaining)),
+                    player);
                 return null;
             }
             if (!session.isProcessing.compareAndSet(false, true)) {
-                player.addChatMessage(err("talkwith.session.processing"));
+                PacketHandler.INSTANCE.sendTo(
+                    PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.processing")),
+                    player);
                 return null;
             }
 

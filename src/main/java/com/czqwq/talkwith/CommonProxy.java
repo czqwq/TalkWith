@@ -18,6 +18,14 @@ import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 public class CommonProxy {
 
+    /**
+     * Keeps a reference to the most recently registered {@link ServerEventHandler} so that
+     * it can be unregistered before a new one is created. Without this, re-entering a
+     * single-player world causes {@code serverStarting} to fire again and register a second
+     * instance — leading to duplicate packets on every player login/logout event.
+     */
+    private ServerEventHandler serverEventHandler;
+
     public void preInit(FMLPreInitializationEvent event) {
         File configDir = new File(
             event.getSuggestedConfigurationFile()
@@ -36,14 +44,27 @@ public class CommonProxy {
     public void serverStarting(FMLServerStartingEvent event) {
         // Session restoration happens in ServerEventHandler.onWorldLoad (WorldEvent.Load for dim 0).
         // SessionPersistence.init() is still called in preInit for the migration fallback path.
-        ServerEventHandler handler = new ServerEventHandler();
+
+        // Unregister the previous handler instance before creating a new one.
+        // In single-player, serverStarting fires each time the player enters a world.
+        // Without this guard a second (third, …) instance would accumulate on both buses,
+        // causing every login/logout/chat event to fire once per registered instance —
+        // manifesting as duplicate handshake packets, double "server has mod" notifications,
+        // and doubled session-restore messages.
+        if (serverEventHandler != null) {
+            MinecraftForge.EVENT_BUS.unregister(serverEventHandler);
+            FMLCommonHandler.instance()
+                .bus()
+                .unregister(serverEventHandler);
+        }
+        serverEventHandler = new ServerEventHandler();
         // WorldEvent / ServerChatEvent live on MinecraftForge.EVENT_BUS.
-        MinecraftForge.EVENT_BUS.register(handler);
+        MinecraftForge.EVENT_BUS.register(serverEventHandler);
         // PlayerLoggedIn/Out live on the FML game-event bus — must register here too or
         // logout/login handlers are never called (causing session state leaks and missing handshakes).
         FMLCommonHandler.instance()
             .bus()
-            .register(handler);
+            .register(serverEventHandler);
     }
 
     /**

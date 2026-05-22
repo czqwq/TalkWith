@@ -125,28 +125,37 @@ public class TextUtils {
         String[] parts = sb.toString()
             .split("\n", -1);
         boolean firstMsg = true;
-        for (String line : parts) {
-            if (line.isEmpty()) continue; // skip blank lines
+        for (String rawLine : parts) {
+            if (rawLine.isEmpty()) continue;
+            String line = rawLine;
+
+            // For the first segment the prefix is prepended, so the available width is
+            // narrower; continuation lines use "§7 §r" (2 visible spaces).
+            String prefix = firstMsg ? linePrefix : "§7  §r";
+            int availWidth = MAX_VISUAL_WIDTH - visualWidth(prefix);
 
             // Chunk excessively long lines using visual width so CJK double-width
             // characters are counted correctly (each CJK char = 2 width units).
-            while (visualWidth(line) > MAX_VISUAL_WIDTH) {
-                int cut = findVisualCut(line, MAX_VISUAL_WIDTH);
+            while (visualWidth(line) > availWidth) {
+                int cut = findVisualCut(line, availWidth);
                 // Prefer to break at a space so we don't cut mid-word
                 int space = line.lastIndexOf(' ', cut);
                 if (space > cut / 2) cut = space;
                 String chunk = line.substring(0, cut)
                     .trim();
                 if (!chunk.isEmpty()) {
-                    addChatMessage(firstMsg ? linePrefix + chunk : "§7  §r" + chunk);
+                    addChatMessage(prefix + chunk);
                     firstMsg = false;
                 }
                 line = line.substring(cut)
                     .trim();
+                // After the first chunk the prefix switches to the continuation indent
+                prefix = "§7  §r";
+                availWidth = MAX_VISUAL_WIDTH - visualWidth(prefix);
             }
 
             if (!line.isEmpty()) {
-                addChatMessage(firstMsg ? linePrefix + line : "§7  §r" + line);
+                addChatMessage(prefix + line);
                 firstMsg = false;
             }
         }
