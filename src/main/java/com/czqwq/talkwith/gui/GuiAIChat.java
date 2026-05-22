@@ -248,7 +248,10 @@ public class GuiAIChat extends GuiScreen {
             ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
             reply -> ClientProxy.scheduleOnMainThread(() -> {
                 ClientProxy.clientSession.addMessage("assistant", reply);
-                addLine(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply);
+                String prefix = StatCollector.translateToLocal("talkwith.chat.ai_prefix");
+                for (String line : com.czqwq.talkwith.util.TextUtils.buildAIReplyLines(prefix, reply)) {
+                    addLine(line);
+                }
                 isThinking = false;
                 scrollToBottom();
             }),

@@ -69,11 +69,12 @@ public class PacketClientAIRequest implements IMessage {
                             com.czqwq.talkwith.Config.loadPromptFromFile(com.czqwq.talkwith.Config.clientPromptFile)),
                         reply -> ClientProxy.scheduleOnMainThread(() -> {
                             ClientProxy.clientSession.addMessage("assistant", reply);
-                            String replyLine = StatCollector.translateToLocal("talkwith.chat.ai_prefix") + reply;
-                            ClientProxy.addToChatHistory(replyLine);
+                            String prefix = StatCollector.translateToLocal("talkwith.chat.ai_prefix");
+                            for (String line : com.czqwq.talkwith.util.TextUtils.buildAIReplyLines(prefix, reply)) {
+                                ClientProxy.addToChatHistory(line);
+                            }
                             // Also surface in vanilla chat since the GUI is closed
-                            com.czqwq.talkwith.util.TextUtils
-                                .sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), reply);
+                            com.czqwq.talkwith.util.TextUtils.sendAIReply(prefix, reply);
                         }),
                         err -> ClientProxy.scheduleOnMainThread(() -> {
                             String errLine = StatCollector.translateToLocal("talkwith.chat.error_prefix") + err;

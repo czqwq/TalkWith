@@ -66,14 +66,23 @@ public class ServerEventHandler {
             SharedSession session = SharedSession.sessions.get(lastSessionId);
             if (session != null) {
                 session.players.add(playerUuid);
-                // silent=true: only update currentSessionId on the client, no GUI popup
-                PacketHandler.INSTANCE
-                    .sendTo(new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId, true), player);
+                // silent=true: only update currentSessionId on the client, no GUI popup.
+                // Include the session name so the notification shows "test" instead of a UUID.
+                PacketHandler.INSTANCE.sendTo(
+                    new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId, true, session.sessionName),
+                    player);
                 // Restore single-override state if it was persisted on logout
                 if (SessionWorldData.singleOverrideSet.remove(playerUuid)) {
                     singleModeOverride.add(playerUuid);
                 }
                 SessionWorldData.save();
+                // Re-send recent history silently so the client's chatHistory is pre-populated.
+                // This means the GUI will show context immediately when the player opens it,
+                // matching the behaviour they get when using /talkwith session join.
+                for (String[] entry : session.recentMessages) {
+                    PacketHandler.INSTANCE
+                        .sendTo(PacketSessionBroadcast.historyOnly(entry[0], entry[1], entry[2]), player);
+                }
             }
         }
     }
@@ -192,7 +201,9 @@ public class ServerEventHandler {
         }
         boolean useLocalAI = (foundSession == null) || singleModeOverride.contains(playerUuid);
         if (!useLocalAI) {
-            PacketHandler.INSTANCE.sendTo(new com.czqwq.talkwith.network.PacketOpenGui(foundSession.sessionId), player);
+            PacketHandler.INSTANCE.sendTo(
+                new com.czqwq.talkwith.network.PacketOpenGui(foundSession.sessionId, false, foundSession.sessionName),
+                player);
         } else {
             // PacketClientAIRequest with empty message signals "open GUI, no AI call"
             PacketHandler.INSTANCE.sendTo(new PacketClientAIRequest(playerName, ""), player);

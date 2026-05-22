@@ -20,6 +20,12 @@ public class PacketSessionBroadcast implements IMessage {
     public String aiReply;
     /** When true the payload is an error string (in {@link #aiReply}) rather than an AI reply. */
     public boolean isError;
+    /**
+     * When true, only update {@link com.czqwq.talkwith.ClientProxy#chatHistory} — do NOT
+     * display the message in vanilla chat or trigger GUI updates. Used to silently pre-populate
+     * history on session reconnect so the user has context when they open the GUI.
+     */
+    public boolean historyOnly;
 
     public PacketSessionBroadcast() {}
 
@@ -28,6 +34,7 @@ public class PacketSessionBroadcast implements IMessage {
         this.playerMsg = playerMsg;
         this.aiReply = aiReply;
         this.isError = false;
+        this.historyOnly = false;
     }
 
     /** Factory for error broadcasts — the error message is stored in {@link #aiReply}. */
@@ -37,12 +44,24 @@ public class PacketSessionBroadcast implements IMessage {
         return p;
     }
 
+    /**
+     * Factory for silent history-only broadcasts — the message is added to
+     * {@link com.czqwq.talkwith.ClientProxy#chatHistory} but not displayed in chat.
+     * Used to restore recent session history on reconnect.
+     */
+    public static PacketSessionBroadcast historyOnly(String playerName, String playerMsg, String aiReply) {
+        PacketSessionBroadcast p = new PacketSessionBroadcast(playerName, playerMsg, aiReply);
+        p.historyOnly = true;
+        return p;
+    }
+
     @Override
     public void fromBytes(ByteBuf buf) {
         playerName = ByteBufUtils.readUTF8String(buf);
         playerMsg = ByteBufUtils.readUTF8String(buf);
         aiReply = ByteBufUtils.readUTF8String(buf);
         isError = buf.readBoolean();
+        historyOnly = buf.readBoolean();
     }
 
     @Override
@@ -51,6 +70,7 @@ public class PacketSessionBroadcast implements IMessage {
         ByteBufUtils.writeUTF8String(buf, playerMsg);
         ByteBufUtils.writeUTF8String(buf, aiReply);
         buf.writeBoolean(isError);
+        buf.writeBoolean(historyOnly);
     }
 
     public static class Handler implements IMessageHandler<PacketSessionBroadcast, IMessage> {
@@ -61,19 +81,37 @@ public class PacketSessionBroadcast implements IMessage {
             final String pm = msg.playerMsg;
             final String ar = msg.aiReply;
             final boolean err = msg.isError;
+            final boolean histOnly = msg.historyOnly;
             ClientProxy.scheduleOnMainThread(() -> {
+                String aiPrefix = StatCollector.translateToLocal("talkwith.chat.ai_prefix");
+
+                // Silent history-only mode: populate chatHistory without displaying anything.
+                // Used on reconnect to restore recent session context.
+                if (histOnly) {
+                    if (!err) {
+                        ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
+                        for (String line : TextUtils.buildAIReplyLines(aiPrefix, ar)) {
+                            ClientProxy.addToChatHistory(line);
+                        }
+                    }
+                    return;
+                }
+
                 GuiAIChat gui = ClientProxy.activeGui;
 
                 // If the GUI is explicitly open, always route to it — even when useVanillaGui is true.
                 // This covers the case where the player opened the GUI while still in vanilla mode.
                 if (gui != null) {
-                    // Also persist to shared history so future GUI opens can show the message
+                    // Persist each formatted AI reply line to shared history so future GUI opens
+                    // can show the messages correctly (avoiding single-entry multi-line truncation).
                     if (err) {
                         ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.error_prefix") + ar);
                         gui.appendError(ar);
                     } else {
                         ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
-                        ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + ar);
+                        for (String line : TextUtils.buildAIReplyLines(aiPrefix, ar)) {
+                            ClientProxy.addToChatHistory(line);
+                        }
                         gui.appendReply(pn, pm, ar);
                     }
                     return;
@@ -96,9 +134,11 @@ public class PacketSessionBroadcast implements IMessage {
                     TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.session.ai_error", ar));
                 } else {
                     ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
-                    ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.ai_prefix") + ar);
+                    for (String line : TextUtils.buildAIReplyLines(aiPrefix, ar)) {
+                        ClientProxy.addToChatHistory(line);
+                    }
                     TextUtils.addChatMessage("§e[" + pn + "]: §f" + pm);
-                    TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), ar);
+                    TextUtils.sendAIReply(aiPrefix, ar);
                 }
             });
             return null;
