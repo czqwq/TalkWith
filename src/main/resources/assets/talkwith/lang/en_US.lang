@@ -98,8 +98,8 @@ talkwith.takeover.chat_mode.ai=Chat mode: §b[AI]§r — every message triggers 
 talkwith.chat.usage=Usage: /talkwith chat <group|public|ai>
 talkwith.status.takeover=Takeover: §aON§r | Chat mode: §e%s§r
 # Chat display labels
-talkwith.chat.ai_prefix=§b[AI]: §r
-talkwith.chat.error_prefix=§c[Error]: §r
+talkwith.chat.ai_prefix=§b[AI]: §f
+talkwith.chat.error_prefix=§c[Error]: §f
 talkwith.session.click_to_join=§b[Click to join]
 talkwith.chat.group_format=§7[Group]§r %s: %s
 # Moderator role (D1)

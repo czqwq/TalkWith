@@ -61,10 +61,13 @@ public class ServerEventHandler {
 
         // Restore previous session if the player disconnected while in one.
         // Use a silent packet so the GUI does not auto-open on every login.
-        String lastSessionId = SessionWorldData.playerSessionMap.remove(playerUuid);
+        // Use get() first, then remove() only on success so that the mapping is not
+        // permanently lost if the session isn't loaded for some reason (e.g. timing).
+        String lastSessionId = SessionWorldData.playerSessionMap.get(playerUuid);
         if (lastSessionId != null) {
             SharedSession session = SharedSession.sessions.get(lastSessionId);
             if (session != null) {
+                SessionWorldData.playerSessionMap.remove(playerUuid);
                 session.players.add(playerUuid);
                 // silent=true: only update currentSessionId on the client, no GUI popup.
                 // Include the session name so the notification shows "test" instead of a UUID.
