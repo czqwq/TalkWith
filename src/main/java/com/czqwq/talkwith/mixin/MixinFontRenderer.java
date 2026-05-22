@@ -15,7 +15,7 @@ import cpw.mods.fml.common.Loader;
  * Fallback fix for Unicode/CJK full-width character rendering when Angelica is not installed.
  *
  * <p>
- * Vanilla {@link FontRenderer#getCharWidth(char)} has two bugs when {@code unicodeFlag} is true:
+ * Vanilla {@link FontRenderer#getCharWidth(char)} has three bugs when {@code unicodeFlag} is true:
  * <ol>
  * <li>Sign-extension: {@code glyphWidth[c] >>> 4} interprets the byte as a signed {@code int},
  * producing a huge value for bytes &ge; 0x80. This makes the computed advance massively
@@ -41,14 +41,19 @@ public abstract class MixinFontRenderer {
     @Shadow
     protected byte[] glyphWidth;
 
-    /** Cached result of the Angelica presence check (null = not yet checked). */
+    /** Whether the Angelica presence check has been performed. */
     @Unique
-    private static volatile Boolean talkwith$angelicaPresent = null;
+    private static boolean talkwith$angelicaChecked = false;
+
+    /** Cached result of the Angelica presence check. */
+    @Unique
+    private static boolean talkwith$angelicaPresent = false;
 
     @Unique
     private static boolean talkwith$isAngelicaLoaded() {
-        if (talkwith$angelicaPresent == null) {
+        if (!talkwith$angelicaChecked) {
             talkwith$angelicaPresent = Loader.isModLoaded("angelica");
+            talkwith$angelicaChecked = true;
         }
         return talkwith$angelicaPresent;
     }
