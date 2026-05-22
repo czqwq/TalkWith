@@ -88,7 +88,8 @@ public class PacketSessionControl implements IMessage {
                     session = new SharedSession(playerUuid, playerName, Config.baseUrl, Config.apiKey, Config.model);
                     SharedSession.sessions.put(session.sessionId, session);
                     player.addChatMessage(okf("talkwith.session.created", session.sessionId));
-                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
+                    PacketHandler.INSTANCE
+                        .sendTo(new PacketOpenGui(session.sessionId, false, session.sessionName), player);
                 }
                 PacketHandler.INSTANCE.sendTo(new PacketShareInvite(playerName, session.sessionId), targetPlayer);
                 // Record the invitation so the target player can join a private session
@@ -124,7 +125,8 @@ public class PacketSessionControl implements IMessage {
                 newSession.sessionName = proposedName;
                 SharedSession.sessions.put(newSession.sessionId, newSession);
                 player.addChatMessage(okf("talkwith.session.created", proposedName));
-                PacketHandler.INSTANCE.sendTo(new PacketOpenGui(newSession.sessionId), player);
+                PacketHandler.INSTANCE
+                    .sendTo(new PacketOpenGui(newSession.sessionId, false, newSession.sessionName), player);
                 SessionWorldData.save();
                 return null;
             }
@@ -598,7 +600,8 @@ public class PacketSessionControl implements IMessage {
                     String displayName = session.sessionName.isEmpty() ? session.sessionId : session.sessionName;
                     player.addChatMessage(okf("talkwith.session.request_accepted_by_mod", msg.target));
                     targetPlayer.addChatMessage(okf("talkwith.session.request_accepted", displayName));
-                    PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), targetPlayer);
+                    PacketHandler.INSTANCE
+                        .sendTo(new PacketOpenGui(session.sessionId, false, session.sessionName), targetPlayer);
                     for (String[] entry : session.recentMessages) {
                         PacketHandler.INSTANCE
                             .sendTo(new PacketSessionBroadcast(entry[0], entry[1], entry[2]), targetPlayer);

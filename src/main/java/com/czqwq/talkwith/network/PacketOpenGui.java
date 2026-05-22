@@ -30,29 +30,44 @@ public class PacketOpenGui implements IMessage {
      * Used on login to silently restore session membership without forcing the chat screen open.
      */
     public boolean silent;
+    /**
+     * Human-readable session name for display in notifications.
+     * Empty string means the session has no name (UUID will be shown as fallback).
+     */
+    public String sessionName;
 
     public PacketOpenGui() {}
 
     public PacketOpenGui(String sessionId) {
         this.sessionId = sessionId != null ? sessionId : "";
         this.silent = false;
+        this.sessionName = "";
     }
 
     public PacketOpenGui(String sessionId, boolean silent) {
         this.sessionId = sessionId != null ? sessionId : "";
         this.silent = silent;
+        this.sessionName = "";
+    }
+
+    public PacketOpenGui(String sessionId, boolean silent, String sessionName) {
+        this.sessionId = sessionId != null ? sessionId : "";
+        this.silent = silent;
+        this.sessionName = sessionName != null ? sessionName : "";
     }
 
     @Override
     public void fromBytes(ByteBuf buf) {
         sessionId = ByteBufUtils.readUTF8String(buf);
         silent = buf.readBoolean();
+        sessionName = ByteBufUtils.readUTF8String(buf);
     }
 
     @Override
     public void toBytes(ByteBuf buf) {
         ByteBufUtils.writeUTF8String(buf, sessionId != null ? sessionId : "");
         buf.writeBoolean(silent);
+        ByteBufUtils.writeUTF8String(buf, sessionName != null ? sessionName : "");
     }
 
     public static class Handler implements IMessageHandler<PacketOpenGui, IMessage> {
@@ -61,6 +76,7 @@ public class PacketOpenGui implements IMessage {
         public IMessage onMessage(PacketOpenGui msg, MessageContext ctx) {
             final String sid = msg.sessionId;
             final boolean isSilent = msg.silent;
+            final String sName = msg.sessionName != null ? msg.sessionName : "";
             ClientProxy.scheduleOnMainThread(() -> {
                 if (sid == null || sid.isEmpty()) {
                     ClientProxy.currentSessionId = null;
@@ -73,15 +89,16 @@ public class PacketOpenGui implements IMessage {
                 }
                 // Always update the session ID
                 ClientProxy.currentSessionId = sid;
+                // Prefer the human-readable session name; fall back to UUID.
+                String displayName = sName.isEmpty() ? sid : sName;
                 if (isSilent) {
                     // Silent restore (login reconnect): just set the ID, notify via chat
-                    String displayName = sid;
                     TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.gui.session_joined", displayName));
                     return;
                 }
                 if (ClientProxy.useVanillaGui) {
                     // Vanilla mode: just update the session ID and notify via chat
-                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.gui.session_joined", sid));
+                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.gui.session_joined", displayName));
                 } else {
                     // Open the GUI if it is not already open
                     if (ClientProxy.activeGui == null) {

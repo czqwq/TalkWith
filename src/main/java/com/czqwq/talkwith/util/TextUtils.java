@@ -108,20 +108,24 @@ public class TextUtils {
     }
 
     /**
-     * Sends an AI reply to local chat, properly handling multi-line responses and
-     * stripping raw control characters (e.g. bare LF/CR) that would appear as
-     * placeholder text ("LF", "CR") in Minecraft 1.7.10's FontRenderer.
+     * Formats an AI reply into a list of chat lines, properly handling multi-line
+     * responses and stripping raw control characters (e.g. bare LF/CR) that would
+     * appear as placeholder text ("LF", "CR") in Minecraft 1.7.10's FontRenderer.
      *
      * <p>
-     * The first segment is shown with {@code linePrefix}; continuation lines
-     * are indented so the reader can follow the full reply.
+     * The first line uses {@code linePrefix}; continuation lines use a plain dark-gray
+     * prefix ({@code "§7"}) so the reader can visually distinguish them without a
+     * leading space artifact.
      * </p>
      *
-     * @param linePrefix prefix for the first message, e.g. {@code "§b[AI]: §r"}
+     * @param linePrefix prefix for the first line, e.g. {@code "§b[AI]: §r"}
      * @param reply      raw AI reply (may contain {@code \n}, {@code \r\n}, etc.)
+     * @return ordered list of formatted chat lines ready to pass to
+     *         {@link #addChatMessage} or {@link com.czqwq.talkwith.ClientProxy#addToChatHistory}
      */
-    public static void sendAIReply(String linePrefix, String reply) {
-        if (reply == null || reply.isEmpty()) return;
+    public static List<String> buildAIReplyLines(String linePrefix, String reply) {
+        List<String> result = new ArrayList<>();
+        if (reply == null || reply.isEmpty()) return result;
 
         // Normalize all line-ending variants to \n
         String normalized = reply.replace("\r\n", "\n")
@@ -151,7 +155,9 @@ public class TextUtils {
 
         boolean firstMsg = true;
         for (String segment : segments) {
-            String prefix = firstMsg ? linePrefix : "§7  §r";
+            // Continuation lines use "§7" (dark gray, no leading space) to visually
+            // distinguish them from the first line without introducing a space artifact.
+            String prefix = firstMsg ? linePrefix : "§7";
             int availWidth = MAX_VISUAL_WIDTH - visualWidth(prefix);
             String line = segment;
 
@@ -165,20 +171,34 @@ public class TextUtils {
                 String chunk = line.substring(0, cut)
                     .trim();
                 if (!chunk.isEmpty()) {
-                    addChatMessage(prefix + chunk);
+                    result.add(prefix + chunk);
                     firstMsg = false;
                 }
                 line = line.substring(cut)
                     .trim();
-                // After the first chunk the prefix switches to the continuation indent
-                prefix = "§7  §r";
+                prefix = "§7";
                 availWidth = MAX_VISUAL_WIDTH - visualWidth(prefix);
             }
 
             if (!line.isEmpty()) {
-                addChatMessage(prefix + line);
+                result.add(prefix + line);
                 firstMsg = false;
             }
+        }
+        return result;
+    }
+
+    /**
+     * Sends an AI reply to local chat, properly handling multi-line responses and
+     * stripping raw control characters (e.g. bare LF/CR) that would appear as
+     * placeholder text ("LF", "CR") in Minecraft 1.7.10's FontRenderer.
+     *
+     * @param linePrefix prefix for the first message, e.g. {@code "§b[AI]: §r"}
+     * @param reply      raw AI reply (may contain {@code \n}, {@code \r\n}, etc.)
+     */
+    public static void sendAIReply(String linePrefix, String reply) {
+        for (String line : buildAIReplyLines(linePrefix, reply)) {
+            addChatMessage(line);
         }
     }
 

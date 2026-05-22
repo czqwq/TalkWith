@@ -81,7 +81,7 @@ public class PacketJoinSession implements IMessage {
             session.players.add(player.getUniqueID());
             String displayName = session.sessionName.isEmpty() ? session.sessionId : session.sessionName;
             player.addChatMessage(okf("talkwith.session.joined", displayName));
-            PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId), player);
+            PacketHandler.INSTANCE.sendTo(new PacketOpenGui(session.sessionId, false, session.sessionName), player);
             SessionWorldData.save();
             // Send recent history so the joining player has context
             for (String[] entry : session.recentMessages) {
