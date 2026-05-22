@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "minVersion": "0.7",
+  "package": "com.czqwq.talkwith.mixin",
+  "refmap": "mixins.talkwith.refmap.json",
+  "target": "@env(DEFAULT)",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "MixinFontRenderer"
+  ]
+}
