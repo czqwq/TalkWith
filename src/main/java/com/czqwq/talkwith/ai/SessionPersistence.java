@@ -103,11 +103,16 @@ public class SessionPersistence {
             JsonObject obj = GSON.fromJson(json, JsonObject.class);
             if (obj == null) return null;
 
-            String sessionId = obj.get("sessionId")
-                .getAsString();
-            UUID ownerUuid = UUID.fromString(
-                obj.get("ownerUuid")
-                    .getAsString());
+            JsonElement sessionIdEl = obj.get("sessionId");
+            if (sessionIdEl == null || sessionIdEl.isJsonNull())
+                throw new IllegalArgumentException("Missing required field: sessionId");
+            String sessionId = sessionIdEl.getAsString();
+
+            JsonElement ownerUuidEl = obj.get("ownerUuid");
+            if (ownerUuidEl == null || ownerUuidEl.isJsonNull())
+                throw new IllegalArgumentException("Missing required field: ownerUuid");
+            UUID ownerUuid = UUID.fromString(ownerUuidEl.getAsString());
+
             String ownerName = obj.get("ownerName")
                 .getAsString();
             String ownerBaseUrl = obj.get("ownerBaseUrl")
