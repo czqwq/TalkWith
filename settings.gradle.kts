@@ -1,4 +1,3 @@
-
 pluginManagement {
     repositories {
         maven {
@@ -12,6 +11,13 @@ pluginManagement {
         }
         gradlePluginPortal()
         mavenCentral()
+        maven {
+            name = "JitPack"
+            url = uri("https://jitpack.io")
+            mavenContent {
+                includeGroupByRegex("com\\.github\\..+")
+            }
+        }
         mavenLocal()
     }
 }

@@ -33,6 +33,22 @@
  *
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
+elytraModpackVersion {
+    // 在这配置的gtnh版本 用于自动拉取依赖版本
+    gtnhVersion = "2.8.4"
+    // 是否不缓存拉取的依赖清单文件
+    manifestNoCache = false
+    // 是否自动为输出的jar添加 `gtnhVersion` 后缀
+    attachManifestVersionToJar = false
+}
+
 dependencies {
-    //runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.7.69-GTNH:dev")
+    api("com.github.GTNewHorizons:GTNHLib:0.9.52:dev")
+    runtimeOnly("com.github.GTNewHorizons:Angelica:2.1.25:dev")
+    //require Angelica for font rendering,because of the fucking Full-width characters
+}
+
+@SuppressWarnings('GrMethodMayBeStatic')
+String gtnhDev(String name, String classifier = "dev") {
+    return elytraModpackVersion.gtnh(name, classifier)
 }

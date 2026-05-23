@@ -1,23 +1,95 @@
 package com.czqwq.talkwith;
 
+import java.io.File;
+
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.WorldServer;
+import net.minecraftforge.common.MinecraftForge;
+
+import com.czqwq.talkwith.ai.SessionWorldData;
+import com.czqwq.talkwith.network.PacketHandler;
+
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
+import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 public class CommonProxy {
 
-    // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
-    // GameRegistry." (Remove if not needed)
+    /**
+     * Keeps a reference to the most recently registered {@link ServerEventHandler} so that
+     * it can be unregistered before a new one is created. Without this, re-entering a
+     * single-player world causes {@code serverStarting} to fire again and register a second
+     * instance — leading to duplicate packets on every player login/logout event.
+     */
+    private ServerEventHandler serverEventHandler;
+
     public void preInit(FMLPreInitializationEvent event) {
+        File configDir = new File(
+            event.getSuggestedConfigurationFile()
+                .getParentFile(),
+            "talkwith");
+        configDir.mkdirs();
+        Config.init(new File(configDir, "talkwith.cfg"));
     }
 
-    // load "Do your mod setup. Build whatever data structures you care about. Register recipes." (Remove if not needed)
-    public void init(FMLInitializationEvent event) {}
+    public void init(FMLInitializationEvent event) {
+        PacketHandler.init();
+    }
 
-    // postInit "Handle interaction with other mods, complete your setup based on this." (Remove if not needed)
     public void postInit(FMLPostInitializationEvent event) {}
 
-    // register server commands in this event handler (Remove if not needed)
-    public void serverStarting(FMLServerStartingEvent event) {}
+    public void serverStarting(FMLServerStartingEvent event) {
+        // Session restoration happens in ServerEventHandler.onWorldLoad (WorldEvent.Load for dim 0).
+        // SessionPersistence.init() is still called in preInit for the migration fallback path.
+
+        // Unregister the previous handler instance before creating a new one.
+        // In single-player, serverStarting fires each time the player enters a world.
+        // Without this guard a second (third, …) instance would accumulate on both buses,
+        // causing every login/logout/chat event to fire once per registered instance —
+        // manifesting as duplicate handshake packets, double "server has mod" notifications,
+        // and doubled session-restore messages.
+        if (serverEventHandler != null) {
+            MinecraftForge.EVENT_BUS.unregister(serverEventHandler);
+            FMLCommonHandler.instance()
+                .bus()
+                .unregister(serverEventHandler);
+        }
+        serverEventHandler = new ServerEventHandler();
+        // WorldEvent / ServerChatEvent live on MinecraftForge.EVENT_BUS.
+        MinecraftForge.EVENT_BUS.register(serverEventHandler);
+        // PlayerLoggedIn/Out live on the FML game-event bus — must register here too or
+        // logout/login handlers are never called (causing session state leaks and missing handshakes).
+        FMLCommonHandler.instance()
+            .bus()
+            .register(serverEventHandler);
+
+        // In single-player (integrated server) WorldEvent.Load fires BEFORE
+        // FMLServerStartingEvent, so the handler above misses the initial world load.
+        // Calling restore() here ensures sessions are always loaded when the server is
+        // ready. On a dedicated server the overworld is not yet loaded at this point
+        // (worldServers[0] is null), so get() returns null and this is a no-op — the
+        // onWorldLoad handler will fire later and handle it correctly.
+        SessionWorldData.restore();
+    }
+
+    /**
+     * Force-flush the world save data before the server shuts down.
+     *
+     * <p>
+     * In single-player mode the world save may have already completed before
+     * {@link ServerEventHandler#onPlayerLogout} fires, so relying solely on
+     * {@code markDirty()} is not guaranteed to persist the final session state.
+     * Calling {@code mapStorage.saveAllData()} here ensures the data is written.
+     */
+    public void serverStopping(FMLServerStoppingEvent event) {
+        SessionWorldData.save();
+        MinecraftServer server = MinecraftServer.getServer();
+        if (server == null || server.worldServers == null || server.worldServers.length == 0) return;
+        WorldServer world = server.worldServers[0];
+        if (world == null || world.mapStorage == null) return;
+        world.mapStorage.saveAllData();
+    }
 }
