@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.TalkWith;
+import com.czqwq.talkwith.util.KeyCipher;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -34,39 +36,15 @@ public class SessionPersistence {
             obj.addProperty("ownerUuid", session.ownerUuid.toString());
             obj.addProperty("ownerName", session.ownerName);
             obj.addProperty("ownerBaseUrl", session.ownerBaseUrl);
-            obj.addProperty("ownerApiKey", session.ownerApiKey);
+            // Encrypt the owner key with the server's config passphrase at rest; the in-memory
+            // session always keeps the plaintext for API calls.
+            obj.addProperty("ownerApiKey", encryptForStorage(session.ownerApiKey));
             obj.addProperty("sessionModel", session.sessionModel);
             obj.addProperty(
                 "sessionPromptFile",
                 session.sessionPromptFile != null ? session.sessionPromptFile : "system_prompt.json");
-            obj.addProperty("cooldown", session.cooldown);
             obj.addProperty("sessionMaxHistory", session.sessionMaxHistory);
-            obj.addProperty("isPublic", session.isPublic);
             obj.addProperty("lastActivity", session.lastActivity);
-
-            JsonArray modsArray = new JsonArray();
-            for (UUID uuid : session.moderators) {
-                modsArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
-            }
-            obj.add("moderators", modsArray);
-
-            JsonArray joinReqArray = new JsonArray();
-            for (UUID uuid : session.joinRequests) {
-                joinReqArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
-            }
-            obj.add("joinRequests", joinReqArray);
-
-            JsonArray invitedArray = new JsonArray();
-            for (UUID uuid : session.invitedPlayers) {
-                invitedArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
-            }
-            obj.add("invitedPlayers", invitedArray);
-
-            JsonArray mutedArray = new JsonArray();
-            for (UUID uuid : session.mutedPlayers) {
-                mutedArray.add(new com.google.gson.JsonPrimitive(uuid.toString()));
-            }
-            obj.add("mutedPlayers", mutedArray);
 
             JsonArray histArray = new JsonArray();
             for (ChatMessage msg : session.session.getHistory()) {
@@ -113,25 +91,25 @@ public class SessionPersistence {
                 throw new IllegalArgumentException("Missing required field: ownerUuid");
             UUID ownerUuid = UUID.fromString(ownerUuidEl.getAsString());
 
-            String ownerName = obj.get("ownerName")
-                .getAsString();
-            String ownerBaseUrl = obj.get("ownerBaseUrl")
-                .getAsString();
-            String ownerApiKey = obj.get("ownerApiKey")
-                .getAsString();
-            String sessionModel = obj.get("sessionModel")
-                .getAsString();
-            int cooldown = obj.get("cooldown")
-                .getAsInt();
-
+            // Core fields default gracefully instead of NPE-ing the whole session on a
+            // corrupt/older save (previously a single missing key dropped the entire session).
+            String ownerName = obj.has("ownerName") ? obj.get("ownerName")
+                .getAsString() : "";
+            String ownerBaseUrl = obj.has("ownerBaseUrl") ? obj.get("ownerBaseUrl")
+                .getAsString() : "";
+            String ownerApiKey = obj.has("ownerApiKey") ? decryptForStorage(
+                obj.get("ownerApiKey")
+                    .getAsString())
+                : "";
+            String sessionModel = obj.has("sessionModel") ? obj.get("sessionModel")
+                .getAsString() : "";
             SharedSession session = new SharedSession(
                 sessionId,
                 ownerUuid,
                 ownerName,
                 ownerBaseUrl,
                 ownerApiKey,
-                sessionModel,
-                cooldown);
+                sessionModel);
 
             // Optional fields (added in later versions)
             if (obj.has("sessionName") && !obj.get("sessionName")
@@ -150,45 +128,9 @@ public class SessionPersistence {
                 session.sessionMaxHistory = obj.get("sessionMaxHistory")
                     .getAsInt();
             }
-            if (obj.has("isPublic")) {
-                session.isPublic = obj.get("isPublic")
-                    .getAsBoolean();
-            }
             if (obj.has("lastActivity")) {
                 session.lastActivity = obj.get("lastActivity")
                     .getAsLong();
-            }
-
-            if (obj.has("moderators")) {
-                for (JsonElement el : obj.getAsJsonArray("moderators")) {
-                    try {
-                        session.moderators.add(UUID.fromString(el.getAsString()));
-                    } catch (IllegalArgumentException ignored) {}
-                }
-            }
-
-            if (obj.has("joinRequests")) {
-                for (JsonElement el : obj.getAsJsonArray("joinRequests")) {
-                    try {
-                        session.joinRequests.add(UUID.fromString(el.getAsString()));
-                    } catch (IllegalArgumentException ignored) {}
-                }
-            }
-
-            if (obj.has("invitedPlayers")) {
-                for (JsonElement el : obj.getAsJsonArray("invitedPlayers")) {
-                    try {
-                        session.invitedPlayers.add(UUID.fromString(el.getAsString()));
-                    } catch (IllegalArgumentException ignored) {}
-                }
-            }
-
-            if (obj.has("mutedPlayers")) {
-                for (JsonElement el : obj.getAsJsonArray("mutedPlayers")) {
-                    try {
-                        session.mutedPlayers.add(UUID.fromString(el.getAsString()));
-                    } catch (IllegalArgumentException ignored) {}
-                }
             }
 
             if (obj.has("history")) {
@@ -222,6 +164,28 @@ public class SessionPersistence {
         } catch (Exception e) {
             TalkWith.LOG.error("[TalkWith] Failed to deserialize session JSON", e);
             return null;
+        }
+    }
+
+    /** Encrypts the owner API key at rest using the server config passphrase. */
+    private static String encryptForStorage(String plain) {
+        if (Config.apiKeyPass.isEmpty()) return plain != null ? plain : "";
+        try {
+            return KeyCipher.encrypt(plain != null ? plain : "", Config.apiKeyPass);
+        } catch (Exception e) {
+            TalkWith.LOG.error("[TalkWith] Failed to encrypt session API key", e);
+            return plain != null ? plain : "";
+        }
+    }
+
+    /** Decrypts a stored owner API key; legacy plaintext passes through unchanged. */
+    private static String decryptForStorage(String stored) {
+        if (!KeyCipher.isEncrypted(stored)) return stored;
+        try {
+            return KeyCipher.decrypt(stored, Config.apiKeyPass);
+        } catch (Exception e) {
+            TalkWith.LOG.error("[TalkWith] Failed to decrypt session API key", e);
+            return "";
         }
     }
 }

@@ -35,7 +35,7 @@
  */
 elytraModpackVersion {
     // 在这配置的gtnh版本 用于自动拉取依赖版本
-    gtnhVersion = "2.8.4"
+    gtnhVersion = "2.9.0-beta-1"
     // 是否不缓存拉取的依赖清单文件
     manifestNoCache = false
     // 是否自动为输出的jar添加 `gtnhVersion` 后缀
@@ -43,8 +43,9 @@ elytraModpackVersion {
 }
 
 dependencies {
-    api("com.github.GTNewHorizons:GTNHLib:0.9.52:dev")
-    runtimeOnly("com.github.GTNewHorizons:Angelica:2.1.25:dev")
+    api(gtnhDev("GTNHLib"))
+    implementation(gtnhDev("ModularUI2"))
+    runtimeOnly(gtnhDev("Angelica"))
     //require Angelica for font rendering,because of the fucking Full-width characters
 }
 

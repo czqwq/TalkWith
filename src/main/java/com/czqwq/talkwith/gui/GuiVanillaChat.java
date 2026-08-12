@@ -3,8 +3,8 @@ package com.czqwq.talkwith.gui;
 import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
-import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.ai.AIClient;
+import com.czqwq.talkwith.client.SessionClient;
 import com.czqwq.talkwith.util.TextUtils;
 
 /**
@@ -42,7 +42,7 @@ public class GuiVanillaChat {
         TextUtils.addChatMessage("§e[" + playerName + "]: §f" + text);
         ClientProxy.clientSession.addMessage("user", text);
         AIClient.sendAsync(
-            ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
+            ClientProxy.clientSession.getMessages(SessionClient.resolvePromptText()),
             reply -> ClientProxy.scheduleOnMainThread(() -> {
                 ClientProxy.clientSession.addMessage("assistant", reply);
                 TextUtils.sendAIReply(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), reply);

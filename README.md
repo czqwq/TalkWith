@@ -1,106 +1,50 @@
-# Example Forge Mod for Minecraft 1.7.10
+# TalkWith
 
-[![](https://jitpack.io/v/GTNewHorizons/ExampleMod1.7.10.svg)](https://jitpack.io/#GTNewHorizons/ExampleMod1.7.10)
-[![](https://github.com/GTNewHorizons/ExampleMod1.7.10/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/GTNewHorizons/ExampleMod1.7.10/actions/workflows/build-and-test.yml)
+[English README](README_EN.md)
 
-An example mod for Minecraft 1.7.10 with Forge focussed on a stable, updatable setup.
+在《我的世界》1.7.10 中与 AI 助手聊天的模组。
 
-<!-- omit in toc -->
-### Table of Contents
+TalkWith 让玩家在游戏内直接与 AI 对话。你可以独自使用，也可以与队友共享同一个 AI 会话；支持自定义聊天界面，也支持原版聊天栏模式。
 
-* [Example Forge Mod for Minecraft 1.7.10](#example-forge-mod-for-minecraft-1710)
-    * [Motivation](#motivation)
-    * [Help! I'm stuck!](#help-im-stuck)
-    * [Getting started](#getting-started)
-    * [Features](#features)
-    * [Files](#files)
-    * [Forge's Access Transformers](#forges-access-transformers)
-    * [Mixins](#mixins)
-    * [Advanced](#advanced)
-    * [Feedback wanted](#feedback-wanted)
+## 功能简介
 
+### AI 对话
+- 在游戏内通过自定义界面或原版聊天栏与 AI 对话。
+- 单人模式：AI 请求由客户端直接发起，对话数据不经过服务器。
+- 多人会话：多名玩家加入同一会话，共同与同一个 AI 交流，彼此能看到对方的提问与 AI 回复。
 
-### Motivation
+### 会话管理
+- 创建、加入、退出、解散、重命名会话，并可将会话所有权转移给其他成员。
+- 会话可设为公开或私密；私密会话支持邀请与加入申请审核。
+- 支持设置主持人（Moderator）角色，协助管理成员与申请。
+- 会话内可设置禁言、踢出成员、调整 AI 请求冷却时间。
 
-We had our fair share in struggles with build scripts for Minecraft Forge. There are quite a few pitfalls from non-obvious error messages. This Example Project provides you a build system you can adapt to over 90% of Minecraft Forge mods and can easily be updated if need be.
+### 聊天界面
+- 自定义 AI 对话界面：查看聊天历史、消息摘要、一键清空历史。
+- 设置界面：配置模型、API 地址、API 密钥与提示词。
+- 可切换回原版聊天栏模式，所有功能照常可用。
 
-### Help! I'm stuck!
+### 提示词管理
+- 每个会话拥有独立的提示词文件，互不干扰。
+- 在游戏内即可查看、编辑、新建、保存提示词，并实时生效。
+- 支持从多个提示词文件中切换当前使用的提示词。
 
-We all have been there! Check out our [FAQ](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/docs/FAQ.md). If that doesn't help, please open an issue.
+### 队伍系统
+- 创建队伍，设置所有者、长官、成员三级角色。
+- 邀请、踢出、升降级成员，队伍重命名与解散。
+- 队伍合并：在双方所有者同意后合并成员与数据。
+- 提供管理员命令，可强制管理任意队伍。
 
-### Getting started
+### 安全与配置
+- API 密钥在存档中以加密形式保存，加密口令由用户自行设置（AES 加密）。
+- 会话数据与队伍数据均保存在存档目录中。
 
-Creating mod from scratch:
-1. Unzip [project starter](https://github.com/GTNewHorizons/ExampleMod1.7.10/releases/download/master-packages/starter.zip) into project directory.
-2. Replace placeholders in LICENSE-template and rename it to LICENSE, or remove LICENSE-template and put any other license you like on your code. This is an permissive OSS project and we encourage you participate in OSS movement by having permissive license like one in template. You can find out pros and cons of OSS software in [this article](https://www.freecodecamp.org/news/what-is-great-about-developing-open-source-and-what-is-not/)
-3. Ensure your project is under VCS. For example initialise git repository by running `git init; git commit --message "initialized repository"`.
-4. Replace placeholders (edit values in gradle.properties, change example package and class names, etc.)
-5. Run `./gradlew setupDecompWorkspace`
-6. Run `./gradlew build`
-6. Make sure to check out the rest sections of this file.
-7. You are good to go!
+## 环境要求
+- Minecraft 1.7.10，Forge
+- 需要配置一个兼容的 AI 服务地址与 API 密钥
 
-We also have described guidelines for existing mod [migration](docs/migration.md) and [porting](docs/porting.md)
-
-### Features
-
- - Updatable: Replace [`build.gradle`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/build.gradle) with a newer version
- - Optional API artifact (.jar)
- - Optional version replacement in Java files
- - Optional shadowing of dependencies
- - Simplified setup of Mixin and example
- - Scala support (add sources under `src/main/scala/` instead of `src/main/java/`)
- - Optional named developer account for consistent player progression during testing
- - Boilerplate forge mod as starting point
- - Improved warnings for pitfalls
- - Git Tags integration for versioning
- - [Jitpack](https://jitpack.io) CI
- - GitHub CI:
-   - Releasing your artifacts on new tags pushed. Push git tag named after version (e.g. 1.0.0) which will trigger a release of artifacts with according names.
-   - Running smoke test for server startup. On any server crash occurring workflow will fail and print the crash log.
-
-### Files
- - [`build.gradle`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/build.gradle): This is the core script of the build process. You should not need to tamper with it, unless you are trying to accomplish something out of the ordinary. __Do not touch this file! You will make a future update near impossible if you do so!__
- - [`gradle.properties`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/gradle.properties): The core configuration file. It includes
- - [`dependencies.gradle[.kts]`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/dependencies.gradle): Add your mod's dependencies in this file. This is separate from the main build script, so you may replace the [`build.gradle`](https://github.com/SinTh0r4s/ExampleMod1.7.10/blob/main/build.gradle) if an update is available.
- - [`repositories.gradle[.kts]`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/repositories.gradle): Add your dependencies' repositories. This is separate from the main build script, so you may replace the [`build.gradle`](https://github.com/SinTh0r4s/ExampleMod1.7.10/blob/main/build.gradle) if an update is available.
- - `addon.gradle[.kts]`: Any additional build logic. This is separate from the main build script, so you may replace the [`build.gradle`](https://github.com/SinTh0r4s/ExampleMod1.7.10/blob/main/build.gradle) if an update is available. See [Advanced](#advanced) for more details.
- - [`jitpack.yml`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/jitpack.yml): Ensures that your mod is available as import over [Jitpack](https://jitpack.io).
- - [`.github/workflows/gradle.yml`](https://github.com/GTNewHorizons/ExampleMod1.7.10/blob/main/.github/workflows/gradle.yml): A simple CI script that will build your mod any time it is pushed to `master` or `main` and publish the result as release in your repository. This feature is free with GitHub if your repository is public.
-
-### Forge's Access Transformers
-
-You may activate Forge's Access Transformers by defining a configuration file in `gradle.properties`.
-
-Check out the [`example-access-transformers`](https://github.com/GTNewHorizons/ExampleMod1.7.10/tree/example-access-transformers) branch for a working example!
-
-> [!WARNING]
-> Access Transformers are bugged and will deny you any sources for the decompiled Minecraft! Your development environment will still work, but you might face some inconveniences. For example, IntelliJ will not permit searches in dependencies without attached sources.
-
-### Mixins
-
-[Mixins](https://github.com/SpongePowered/Mixin) are used to modify vanilla or mod/library code during runtime without having to edit, recompile, and redistribute the original code. For example, mixins can change a hardcoded value, redirect a method call, inject additional code, access private fields/methods, make a class implement your interface, and more. Mixins are an advanced feature which most normal mods will not require.
-
-Documentation about Mixin features can be found here: [Mixin Wiki](https://github.com/SpongePowered/Mixin/wiki) and [MixinExtras Wiki](https://github.com/LlamaLad7/MixinExtras/wiki)
-
-There are many examples of mixins in these mods: [Hodgepodge](https://github.com/GTNewHorizons/Hodgepodge) and [Angelica](https://github.com/GTNewHorizons/Angelica)
-
-To enable Mixins in your project, follow one of the example commits:
-- use [normal mixins](https://github.com/GTNewHorizons/ExampleMod1.7.10/commit/beba55615fa8337b7639f0d5b18db6cc8d4826be) for basic and quick registration
-- use [GTNH IMixins](https://github.com/GTNewHorizons/ExampleMod1.7.10/commit/055cd4f18765a421a86c706f53b62116988297e3) (recommended) for the same thing as below, but in a less verbose and more unified manner using the IMixins api
-- use [GTNH Early/Late mixins](https://github.com/GTNewHorizons/ExampleMod1.7.10/commit/c4df59d92164775b69451f3e690239e93d1fc979) to have full control over the registration logic and check for presence of other mods during runtime to load your mixins
-
-The extra required dependencies are handled automatically after mixins are enabled.
-
-### Advanced
-
-If your project requires custom gradle commands you may add a `addon.gradle[.kts]` to your project. It will be added automatically to the build script. Although we recommend against it, it is sometimes required. When in doubt, feel free to ask us about it. You may break future updates of this build system!
-If you need access to properties modified later in the buildscript, you can also use a `addon.late.gradle[.kts]`.
-For local tweaks that you don't want to commit to Git, like adding extra JVM arguments for testing, use `addon[.late].local.gradle[.kts]`.
-
-### Feedback wanted
-
-If you tried out this build script we would love to head your opinion! Is there any feature missing for you? Did something not work? Please open an issue and we will try to resolve it asap!
-
-Happy modding,\
-[SinTh0r4s](https://github.com/SinTh0r4s), [TheElan](https://github.com/TheElan) and [basdxz](https://github.com/basdxz)
+## 快速开始
+1. 将模组放入 `mods` 文件夹。
+2. 进入游戏，使用 `/talkwith config` 相关命令或打开设置界面，填写 AI 服务地址与 API 密钥。
+3. 使用 `/talkwith open` 打开 AI 对话界面开始聊天。
+4. 如需与队友共享，创建或加入一个多人会话。

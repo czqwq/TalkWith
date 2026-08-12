@@ -1,15 +1,9 @@
 package com.czqwq.talkwith.network;
 
-import java.util.UUID;
-
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.StatCollector;
 
-import com.czqwq.talkwith.Config;
-import com.czqwq.talkwith.ServerEventHandler;
-import com.czqwq.talkwith.ai.AIClient;
-import com.czqwq.talkwith.ai.SessionWorldData;
+import com.czqwq.talkwith.ai.SessionAIService;
 import com.czqwq.talkwith.ai.SharedSession;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -47,8 +41,6 @@ public class PacketSessionMessage implements IMessage {
         @Override
         public IMessage onMessage(PacketSessionMessage msg, MessageContext ctx) {
             EntityPlayerMP player = ctx.getServerHandler().playerEntity;
-            UUID playerUuid = player.getUniqueID();
-            String playerName = player.getCommandSenderName();
 
             SharedSession session = SharedSession.sessions.get(msg.sessionId);
             if (session == null) {
@@ -58,57 +50,17 @@ public class PacketSessionMessage implements IMessage {
                     player);
                 return null;
             }
-            if (!session.hasPlayer(playerUuid)) {
+            if (!session.hasPlayer(player.getUniqueID())) {
                 PacketHandler.INSTANCE.sendTo(
                     PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.not_in_session")),
                     player);
                 return null;
             }
-            if (session.isMuted(playerUuid)) {
-                PacketHandler.INSTANCE.sendTo(
-                    PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.muted")),
-                    player);
-                return null;
+            String errorKey = SessionAIService.tryRequest(session, player, msg.message);
+            if (errorKey != null) {
+                PacketHandler.INSTANCE
+                    .sendTo(PacketSessionBroadcast.error(StatCollector.translateToLocal(errorKey)), player);
             }
-            if (session.isCooldownActive()) {
-                long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
-                    / 1000 + 1;
-                PacketHandler.INSTANCE.sendTo(
-                    PacketSessionBroadcast
-                        .error(StatCollector.translateToLocalFormatted("talkwith.session.cooldown", remaining)),
-                    player);
-                return null;
-            }
-            if (!session.isProcessing.compareAndSet(false, true)) {
-                PacketHandler.INSTANCE.sendTo(
-                    PacketSessionBroadcast.error(StatCollector.translateToLocal("talkwith.session.processing")),
-                    player);
-                return null;
-            }
-
-            session.session.addMessage("user", playerName + ": " + msg.message);
-            MinecraftServer server = MinecraftServer.getServer();
-            String prompt = Config.loadPromptFromFile(session.sessionPromptFile);
-            int maxHist = session.sessionMaxHistory > 0 ? session.sessionMaxHistory : Config.maxHistory;
-
-            AIClient.sendAsync(
-                session.session.getMessages(prompt, maxHist),
-                session.ownerBaseUrl,
-                session.ownerApiKey,
-                session.sessionModel,
-                reply -> {
-                    session.session.addMessage("assistant", reply);
-                    session.lastReplyTime = System.currentTimeMillis();
-                    session.lastActivity = session.lastReplyTime;
-                    session.addRecentMessage(playerName, msg.message, reply);
-                    session.isProcessing.set(false);
-                    SessionWorldData.save();
-                    ServerEventHandler.broadcastToSession(session, playerName, msg.message, reply, server);
-                },
-                error -> {
-                    session.isProcessing.set(false);
-                    ServerEventHandler.broadcastErrorToSession(session, error, server);
-                });
             return null;
         }
     }

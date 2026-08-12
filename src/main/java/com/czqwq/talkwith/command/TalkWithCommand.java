@@ -2,19 +2,21 @@ package com.czqwq.talkwith.command;
 
 import java.util.List;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.util.StatCollector;
 
+import com.cleanroommc.modularui.factory.ClientGUI;
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.Config;
+import com.czqwq.talkwith.client.SessionClient;
 import com.czqwq.talkwith.gui.GuiAIChat;
+import com.czqwq.talkwith.gui.GuiAISettings;
+import com.czqwq.talkwith.gui.GuiChatHistory;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketJoinSession;
 import com.czqwq.talkwith.network.PacketSessionControl;
-import com.czqwq.talkwith.util.ApiPinger;
 import com.czqwq.talkwith.util.TextUtils;
 
 public class TalkWithCommand extends CommandBase {
@@ -48,9 +50,8 @@ public class TalkWithCommand extends CommandBase {
      * </p>
      */
     public static void openGui() {
-        if (ClientProxy.useVanillaGui) {
+        if (ClientProxy.useVanillaGui()) {
             // Silently switch to default mode so the GUI works correctly
-            ClientProxy.useVanillaGui = false;
             Config.guiMode = "default";
             Config.save();
             TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_default"));
@@ -58,23 +59,13 @@ public class TalkWithCommand extends CommandBase {
         // Defer opening to the next tick so the chat screen finishes closing first.
         ClientProxy.scheduleOnMainThread(() -> {
             if (ClientProxy.activeGui == null) {
-                Minecraft.getMinecraft()
-                    .displayGuiScreen(new GuiAIChat(""));
+                ClientGUI.open(new GuiAIChat());
             }
         });
     }
 
     private static boolean serverFeatureAvailable() {
-        return ClientProxy.serverHasMod || Minecraft.getMinecraft()
-            .isIntegratedServerRunning();
-    }
-
-    /**
-     * Returns {@code true} when the player is currently in a server session in multi mode.
-     * Used by {@link #handleConfigKey} to route config changes to the session vs. local Config.
-     */
-    private static boolean isMultiMode() {
-        return ClientProxy.currentSessionId != null && !ClientProxy.isSingleOverride && serverFeatureAvailable();
+        return SessionClient.serverFeatureAvailable();
     }
 
     // -------------------------------------------------------------------------
@@ -116,18 +107,12 @@ public class TalkWithCommand extends CommandBase {
                             Config.model,
                             Config.clientPromptFile));
                 }
-                // Show takeover state if active
-                if (ClientProxy.isTakeover) {
-                    TextUtils.info(
-                        StatCollector
-                            .translateToLocalFormatted("talkwith.status.takeover", ClientProxy.takeoverChatMode));
-                }
                 // Always show the current GUI mode
                 TextUtils.info(
                     StatCollector.translateToLocalFormatted(
                         "talkwith.status.gui_mode",
                         StatCollector.translateToLocal(
-                            ClientProxy.useVanillaGui ? "talkwith.gui.mode.vanilla" : "talkwith.gui.mode.default")));
+                            ClientProxy.useVanillaGui() ? "talkwith.gui.mode.vanilla" : "talkwith.gui.mode.default")));
             }
             case "history" -> {
                 if (args.length < 2) {
@@ -135,29 +120,35 @@ public class TalkWithCommand extends CommandBase {
                     return;
                 }
                 if (args[1].equalsIgnoreCase("clear")) {
-                    if (isMultiMode()) {
-                        // Multi-player mode: clear the server-side session AI history
-                        PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("history_clear", ""));
-                    } else {
-                        // Single-player mode: clear the local conversation history
-                        ClientProxy.clientSession.clear();
-                        TextUtils.info(StatCollector.translateToLocal("talkwith.history.cleared"));
+                    ClientProxy.chatHistory.clear();
+                    if (ClientProxy.activeGui instanceof GuiAIChat) {
+                        ((GuiAIChat) ClientProxy.activeGui).clearLines();
                     }
+                    SessionClient.clearHistory();
                 } else if (args[1].equalsIgnoreCase("list") || args[1].equalsIgnoreCase("show")) {
-                    if (isMultiMode()) {
-                        // Multi-player mode: show the count of lines in the local chat display buffer
+                    if (SessionClient.isMultiMode()) {
                         TextUtils.info(
                             StatCollector
                                 .translateToLocalFormatted("talkwith.history.show", ClientProxy.chatHistory.size()));
                     } else {
-                        // Single-player mode: show the local conversation message count
                         TextUtils.info(
                             StatCollector
                                 .translateToLocalFormatted("talkwith.history.show", ClientProxy.clientSession.size()));
                     }
+                } else if (args[1].equalsIgnoreCase("open")) {
+                    ClientProxy.scheduleOnMainThread(() -> {
+                        if (ClientProxy.activeGui instanceof GuiAIChat) {
+                            ClientGUI.open(new GuiChatHistory((GuiAIChat) ClientProxy.activeGui));
+                        } else {
+                            ClientGUI.open(new GuiChatHistory(null));
+                        }
+                    });
                 } else {
                     TextUtils.error(StatCollector.translateToLocalFormatted("talkwith.history.unknown", args[1]));
                 }
+            }
+            case "settings" -> {
+                ClientProxy.scheduleOnMainThread(() -> ClientGUI.open(new GuiAISettings()));
             }
             case "session" -> {
                 if (!serverFeatureAvailable()) {
@@ -169,55 +160,6 @@ public class TalkWithCommand extends CommandBase {
                     return;
                 }
                 handleSession(sender, args);
-            }
-            case "switch" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.usage"));
-                    return;
-                }
-                if (ClientProxy.currentSessionId == null) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.not_in_session"));
-                    return;
-                }
-                if (args[1].equalsIgnoreCase("single")) {
-                    ClientProxy.isSingleOverride = true;
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("switch_single", ""));
-                } else if (args[1].equalsIgnoreCase("multi")) {
-                    ClientProxy.isSingleOverride = false;
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("switch_multi", ""));
-                } else {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.usage"));
-                }
-            }
-            case "takeover" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                // Optimistically toggle client state then confirm with server
-                ClientProxy.isTakeover = !ClientProxy.isTakeover;
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("takeover_toggle", ""));
-            }
-            case "chat" -> {
-                if (!serverFeatureAvailable()) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.server.no_mod"));
-                    return;
-                }
-                if (args.length < 2) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.chat.usage"));
-                    return;
-                }
-                String mode = args[1].toLowerCase();
-                if (!mode.equals("group") && !mode.equals("public") && !mode.equals("ai")) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.chat.usage"));
-                    return;
-                }
-                ClientProxy.takeoverChatMode = mode;
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("chat_mode", mode));
             }
             case "gui" -> handleGui(sender, args);
             case "open" -> openGui();
@@ -250,29 +192,15 @@ public class TalkWithCommand extends CommandBase {
      * If the player is currently in a server session and has NOT activated the single-mode
      * override, the command targets that session's settings (multi mode). Otherwise the command
      * modifies the player's own local (single-mode) settings stored in {@link Config}.
+     * All routing lives in {@link SessionClient}.
      */
     private void handleConfigKey(ICommandSender sender, String[] args) {
-        boolean isMulti = isMultiMode();
-
         switch (args[1].toLowerCase()) {
             case "baseurl" -> {
                 if (args.length < 3) {
-                    if (isMulti) {
-                        TextUtils.info(StatCollector.translateToLocal("talkwith.config.multi.view_hint"));
-                    } else {
-                        TextUtils.info(
-                            StatCollector.translateToLocalFormatted("talkwith.config.baseurl.show", Config.baseUrl));
-                    }
-                    return;
-                }
-                if (isMulti) {
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setting_baseurl", args[2]));
+                    SessionClient.showBaseUrl();
                 } else {
-                    Config.baseUrl = args[2];
-                    Config.save();
-                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.baseurl.set", Config.baseUrl));
-                    TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
-                    ApiPinger.ping();
+                    SessionClient.applyBaseUrl(args[2]);
                 }
             }
             case "keyset" -> {
@@ -280,74 +208,23 @@ public class TalkWithCommand extends CommandBase {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.config.keyset.usage"));
                     return;
                 }
-                if (isMulti) {
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setting_apikey", args[2]));
-                } else {
-                    Config.apiKey = args[2];
-                    Config.save();
-                    TextUtils.info(StatCollector.translateToLocal("talkwith.api.key_updated"));
-                    TextUtils.info(StatCollector.translateToLocal("talkwith.api.pinging"));
-                    ApiPinger.ping();
-                }
+                SessionClient.applyApiKey(args[2]);
             }
             case "model" -> {
                 if (args.length < 3) {
-                    if (isMulti) {
-                        TextUtils.info(StatCollector.translateToLocal("talkwith.config.multi.view_hint"));
-                    } else {
-                        TextUtils
-                            .info(StatCollector.translateToLocalFormatted("talkwith.config.model.show", Config.model));
-                    }
-                    return;
-                }
-                if (isMulti) {
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setting_model", args[2]));
+                    SessionClient.showModel();
                 } else {
-                    Config.model = args[2];
-                    Config.save();
-                    TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.model.set", Config.model));
+                    SessionClient.applyModel(args[2]);
                 }
             }
             case "prompt_file" -> {
                 if (args.length < 3) {
-                    if (isMulti) {
-                        TextUtils.info(StatCollector.translateToLocal("talkwith.config.multi.view_hint"));
-                    } else {
-                        TextUtils.info(
-                            StatCollector.translateToLocalFormatted(
-                                "talkwith.config.prompt_file.show",
-                                Config.clientPromptFile));
-                    }
-                    return;
-                }
-                if (isMulti) {
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cfg_prompt_file", args[2]));
+                    SessionClient.showPromptFile();
                 } else {
-                    String filename = Config.sanitizePromptFilename(args[2]);
-                    Config.loadPromptFromFile(filename);
-                    Config.clientPromptFile = filename;
-                    Config.save();
-                    TextUtils
-                        .info(StatCollector.translateToLocalFormatted("talkwith.config.prompt_file.set", filename));
+                    SessionClient.applyPromptFile(args[2]);
                 }
             }
-            case "list_prompts" -> {
-                if (isMulti) {
-                    PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cfg_list_prompts", ""));
-                } else {
-                    java.util.List<String> files = Config.listPromptFiles();
-                    if (files.isEmpty()) {
-                        TextUtils.info(StatCollector.translateToLocal("talkwith.config.prompts_list_empty"));
-                    } else {
-                        TextUtils.info(
-                            StatCollector
-                                .translateToLocalFormatted("talkwith.config.prompts_list_header", files.size()));
-                        for (String f : files) {
-                            TextUtils.info("  §7- §f" + f);
-                        }
-                    }
-                }
-            }
+            case "list_prompts" -> SessionClient.listPrompts();
             default -> TextUtils.info(StatCollector.translateToLocal("talkwith.config.usage"));
         }
     }
@@ -364,7 +241,6 @@ public class TalkWithCommand extends CommandBase {
                     return;
                 }
                 if (args[2].equalsIgnoreCase("create")) {
-                    // Name is mandatory: /talkwith session server create <name>
                     if (args.length < 4 || args[3].trim()
                         .isEmpty()) {
                         TextUtils.error(StatCollector.translateToLocal("talkwith.session.name_required"));
@@ -376,8 +252,7 @@ public class TalkWithCommand extends CommandBase {
                 }
             }
             case "delete" -> {
-                ClientProxy.currentSessionId = null;
-                ClientProxy.isSingleOverride = false;
+                // Server sends PacketOpenGui("") on success, which clears currentSessionId
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("delete", ""));
             }
             case "join" -> {
@@ -388,103 +263,17 @@ public class TalkWithCommand extends CommandBase {
                 PacketHandler.INSTANCE.sendToServer(new PacketJoinSession(args[2]));
             }
             case "leave" -> {
-                ClientProxy.isSingleOverride = false;
+                // Server sends PacketOpenGui("") on success, which handles state cleanup
                 PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("leave", ""));
             }
             case "list" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("list", ""));
             case "info" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("info", ""));
-            case "invite" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.invite_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("invite", args[2]));
-            }
-            case "kick" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.kick_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("kick", args[2]));
-            }
-            case "mute" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.mute_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("mute", args[2]));
-            }
-            case "unmute" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.unmute_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("unmute", args[2]));
-            }
-            case "cooldown" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.cooldown_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("cooldown", args[2]));
-            }
             case "history" -> {
                 if (args.length >= 3 && args[2].equalsIgnoreCase("clear")) {
                     PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("history_clear", ""));
                 } else {
                     TextUtils.error(StatCollector.translateToLocal("talkwith.session.history_usage"));
                 }
-            }
-            case "rename" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.rename_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("rename", args[2]));
-            }
-            case "setmod" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.setmod_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("setmod", args[2]));
-            }
-            case "removemod" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.removemod_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("removemod", args[2]));
-            }
-            case "request" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.request_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("request", args[2]));
-            }
-            case "accept" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.accept_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("accept", args[2]));
-            }
-            case "deny" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.deny_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("deny", args[2]));
-            }
-            case "public" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("set_public", ""));
-            case "private" -> PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("set_private", ""));
-            case "transfer" -> {
-                if (args.length < 3) {
-                    TextUtils.error(StatCollector.translateToLocal("talkwith.session.transfer_usage"));
-                    return;
-                }
-                PacketHandler.INSTANCE.sendToServer(new PacketSessionControl("transfer", args[2]));
             }
             default -> TextUtils.info(StatCollector.translateToLocal("talkwith.command.session_usage"));
         }
@@ -502,7 +291,6 @@ public class TalkWithCommand extends CommandBase {
         }
         switch (args[1].toLowerCase()) {
             case "default" -> {
-                ClientProxy.useVanillaGui = false;
                 Config.guiMode = "default";
                 Config.save();
                 TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_default"));
@@ -511,21 +299,18 @@ public class TalkWithCommand extends CommandBase {
                 if (ClientProxy.currentSessionId != null && ClientProxy.activeGui == null) {
                     ClientProxy.scheduleOnMainThread(() -> {
                         if (ClientProxy.activeGui == null) {
-                            Minecraft.getMinecraft()
-                                .displayGuiScreen(new GuiAIChat(""));
+                            ClientGUI.open(new GuiAIChat());
                         }
                     });
                 }
             }
             case "vanilla" -> {
-                ClientProxy.useVanillaGui = true;
                 Config.guiMode = "vanilla";
                 Config.save();
                 TextUtils.info(StatCollector.translateToLocal("talkwith.gui.switched_vanilla"));
                 // Close GuiAIChat if it is currently open
                 if (ClientProxy.activeGui != null) {
-                    Minecraft.getMinecraft()
-                        .displayGuiScreen(null);
+                    ClientGUI.close();
                 }
             }
             case "open" -> openGui();
@@ -546,10 +331,8 @@ public class TalkWithCommand extends CommandBase {
                 "config",
                 "status",
                 "history",
+                "settings",
                 "session",
-                "switch",
-                "takeover",
-                "chat",
                 "gui",
                 "open");
         }
@@ -565,7 +348,7 @@ public class TalkWithCommand extends CommandBase {
                         "list_prompts",
                         "reload");
                 case "history":
-                    return getListOfStringsMatchingLastWord(args, "clear", "show");
+                    return getListOfStringsMatchingLastWord(args, "clear", "show", "open");
                 case "session":
                     return getListOfStringsMatchingLastWord(
                         args,
@@ -575,25 +358,7 @@ public class TalkWithCommand extends CommandBase {
                         "leave",
                         "list",
                         "info",
-                        "invite",
-                        "kick",
-                        "mute",
-                        "unmute",
-                        "cooldown",
-                        "history",
-                        "rename",
-                        "setmod",
-                        "removemod",
-                        "request",
-                        "accept",
-                        "deny",
-                        "public",
-                        "private",
-                        "transfer");
-                case "switch":
-                    return getListOfStringsMatchingLastWord(args, "single", "multi");
-                case "chat":
-                    return getListOfStringsMatchingLastWord(args, "group", "public", "ai");
+                        "history");
                 case "gui":
                     return getListOfStringsMatchingLastWord(args, "default", "vanilla", "open");
             }
