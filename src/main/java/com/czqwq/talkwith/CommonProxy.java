@@ -8,6 +8,10 @@ import net.minecraftforge.common.MinecraftForge;
 
 import com.czqwq.talkwith.ai.SessionWorldData;
 import com.czqwq.talkwith.network.PacketHandler;
+import com.czqwq.talkwith.teams.TeamCommand;
+import com.czqwq.talkwith.teams.TeamDataRegistry;
+import com.czqwq.talkwith.teams.TeamDataSaver;
+import com.czqwq.talkwith.teams.TeamSessionData;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -33,6 +37,12 @@ public class CommonProxy {
             "talkwith");
         configDir.mkdirs();
         Config.init(new File(configDir, "talkwith.cfg"));
+        // Team data must be registered before any team is created (players get teams on login).
+        TeamDataRegistry.register(TeamSessionData.KEY, TeamSessionData::new);
+        // Register the saver once, BEFORE any WorldEvent.Load can fire — on integrated
+        // servers the first world load happens before FMLServerStartingEvent, which would
+        // otherwise mean the first world entry loads/saves no team data at all.
+        MinecraftForge.EVENT_BUS.register(new TeamDataSaver());
     }
 
     public void init(FMLInitializationEvent event) {
@@ -43,7 +53,10 @@ public class CommonProxy {
 
     public void serverStarting(FMLServerStartingEvent event) {
         // Session restoration happens in ServerEventHandler.onWorldLoad (WorldEvent.Load for dim 0).
-        // SessionPersistence.init() is still called in preInit for the migration fallback path.
+
+        // Register team commands (player and admin variants of the same command).
+        event.registerServerCommand(new TeamCommand(false));
+        event.registerServerCommand(new TeamCommand(true));
 
         // Unregister the previous handler instance before creating a new one.
         // In single-player, serverStarting fires each time the player enters a world.

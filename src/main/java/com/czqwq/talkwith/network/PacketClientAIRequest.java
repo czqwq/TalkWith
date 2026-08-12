@@ -4,6 +4,7 @@ import net.minecraft.util.StatCollector;
 
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.ai.AIClient;
+import com.czqwq.talkwith.client.SessionClient;
 import com.czqwq.talkwith.gui.GuiVanillaChat;
 
 import cpw.mods.fml.common.network.ByteBufUtils;
@@ -53,7 +54,7 @@ public class PacketClientAIRequest implements IMessage {
                     return;
                 }
 
-                if (ClientProxy.useVanillaGui) {
+                if (ClientProxy.useVanillaGui()) {
                     // Vanilla mode: route AI call through vanilla chat
                     GuiVanillaChat.injectAndSend(pName, pMsg);
                 } else if (ClientProxy.activeGui != null) {
@@ -65,8 +66,7 @@ public class PacketClientAIRequest implements IMessage {
                     ClientProxy.addToChatHistory("§e" + pName + ": §f" + pMsg);
                     ClientProxy.clientSession.addMessage("user", pMsg);
                     AIClient.sendAsync(
-                        ClientProxy.clientSession.getMessages(
-                            com.czqwq.talkwith.Config.loadPromptFromFile(com.czqwq.talkwith.Config.clientPromptFile)),
+                        ClientProxy.clientSession.getMessages(SessionClient.resolvePromptText()),
                         reply -> ClientProxy.scheduleOnMainThread(() -> {
                             ClientProxy.clientSession.addMessage("assistant", reply);
                             String prefix = StatCollector.translateToLocal("talkwith.chat.ai_prefix");

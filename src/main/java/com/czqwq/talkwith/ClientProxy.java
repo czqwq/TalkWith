@@ -10,6 +10,7 @@ import net.minecraftforge.common.MinecraftForge;
 import com.czqwq.talkwith.ai.ChatSession;
 import com.czqwq.talkwith.command.TalkWithCommand;
 import com.czqwq.talkwith.gui.GuiAIChat;
+import com.czqwq.talkwith.teams.TeamManagerClient;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -25,25 +26,20 @@ public class ClientProxy extends CommonProxy {
     public static String currentSessionId = null;
     /** True when the player is in a session but has used {@code /talkwith switch single}. */
     public static boolean isSingleOverride = false;
-    /** True when takeover mode is active (all chat intercepted, no {@code >} prefix needed). */
-    public static boolean isTakeover = false;
-    /**
-     * Chat mode while in takeover: {@code "ai"} (default), {@code "group"}, or {@code "public"}.
-     * Only meaningful when {@link #isTakeover} is true.
-     */
-    public static String takeoverChatMode = "ai";
     /**
      * The currently-open {@link GuiAIChat} instance, or {@code null} when the GUI is closed.
      * Set by {@link GuiAIChat} on open/close. Used by {@link com.czqwq.talkwith.network.PacketSessionBroadcast}
      * to route AI replies into the GUI rather than vanilla chat when the player has it open.
      */
     public static volatile GuiAIChat activeGui = null;
+
     /**
-     * When {@code false} (default), AI replies are shown in {@link GuiAIChat}.
-     * When {@code true}, all AI I/O is routed through the vanilla chat HUD.
-     * Persisted via {@link Config#guiMode}; never reset on reconnect.
+     * Whether AI I/O is routed through the vanilla chat HUD. Derived from
+     * {@link Config#guiMode} so there is a single source of truth; never mutated directly.
      */
-    public static boolean useVanillaGui = false;
+    public static boolean useVanillaGui() {
+        return "vanilla".equals(Config.guiMode);
+    }
 
     /**
      * Persistent chat history shared across all {@link GuiAIChat} instances.
@@ -55,6 +51,26 @@ public class ClientProxy extends CommonProxy {
     public static final int MAX_CHAT_HISTORY = 500;
 
     private static final ConcurrentLinkedQueue<Runnable> mainThreadTasks = new ConcurrentLinkedQueue<>();
+
+    /** Latest known server session AI settings (multi mode), populated by {@code setting_get} responses. */
+    public static final SessionSettings sessionSettings = new SessionSettings();
+
+    /** Client-side cache of the active server session's AI settings (multi mode only). */
+    public static class SessionSettings {
+
+        public volatile String model = "";
+        public volatile String baseUrl = "";
+        public volatile boolean hasApiKey = false;
+        public volatile String promptFile = "";
+    }
+
+    /** Stores the latest server session settings received from {@code setting_get}. */
+    public static void storeSessionSettings(com.czqwq.talkwith.network.PacketSessionSettings s) {
+        sessionSettings.model = s.model;
+        sessionSettings.baseUrl = s.baseUrl;
+        sessionSettings.hasApiKey = s.hasApiKey;
+        sessionSettings.promptFile = s.promptFile;
+    }
 
     /**
      * Appends a line to {@link #chatHistory}, evicting the oldest entry if the cap is exceeded.
@@ -74,14 +90,18 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void preInit(FMLPreInitializationEvent event) {
         super.preInit(event);
-        // Apply the persisted GUI mode preference (default vs vanilla)
-        useVanillaGui = "vanilla".equals(Config.guiMode);
+        // GUI mode is derived from Config.guiMode (single source of truth), no field to sync.
     }
 
     @Override
     public void init(FMLInitializationEvent event) {
         super.init(event);
         ClientCommandHandler.instance.registerCommand(new TalkWithCommand());
+        // TeamManagerClient listens for FMLNetworkEvent.ClientDisconnectionFromServerEvent,
+        // which is posted on the FML bus (not the Forge event bus).
+        FMLCommonHandler.instance()
+            .bus()
+            .register(new TeamManagerClient());
         MinecraftForge.EVENT_BUS.register(this);
         FMLCommonHandler.instance()
             .bus()
@@ -110,8 +130,6 @@ public class ClientProxy extends CommonProxy {
         serverHasMod = false;
         currentSessionId = null;
         isSingleOverride = false;
-        isTakeover = false;
-        takeoverChatMode = "ai";
         chatHistory.clear();
     }
 }

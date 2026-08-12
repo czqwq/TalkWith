@@ -131,7 +131,12 @@ public class PacketSessionBroadcast implements IMessage {
                         ClientProxy.addToChatHistory(StatCollector.translateToLocal("talkwith.chat.error_prefix") + ar);
                         gui.appendError(ar);
                     } else {
-                        ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
+                        // The sender's own GUI already added a local "You: msg" line via
+                        // GuiAIChat.sendMessage. Without this dedup the server echo would be
+                        // appended again, so the sender sees every message twice in history.
+                        if (!isEchoAlreadyShownLocally(pn, pm)) {
+                            ClientProxy.addToChatHistory("§e[" + pn + "]: §f" + pm);
+                        }
                         for (String line : TextUtils.buildAIReplyLines(aiPrefix, ar)) {
                             ClientProxy.addToChatHistory(line);
                         }
@@ -141,7 +146,7 @@ public class PacketSessionBroadcast implements IMessage {
                 }
 
                 // GUI is not open.
-                if (ClientProxy.useVanillaGui) {
+                if (ClientProxy.useVanillaGui()) {
                     // Vanilla mode: route directly to vanilla chat (no chatHistory update)
                     if (err) {
                         GuiVanillaChat.appendError(ar);
@@ -165,6 +170,29 @@ public class PacketSessionBroadcast implements IMessage {
                 }
             });
             return null;
+        }
+
+        /**
+         * True when the broadcast is the local player's own message AND the exact message
+         * text already appears as a local "You: ..." line in chatHistory (added optimistically
+         * by {@link GuiAIChat#sendMessage} when sending through the GUI). In that case the
+         * server echo must not be appended again, or the sender sees every message twice.
+         * If the player sent the message through another path (e.g. the vanilla chat {@code > }
+         * shortcut) there is no local line, so the echo is kept.
+         */
+        private static boolean isEchoAlreadyShownLocally(String playerName, String playerMsg) {
+            net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
+            if (mc.thePlayer == null || playerMsg == null || !playerName.equals(mc.thePlayer.getCommandSenderName())) {
+                return false;
+            }
+            for (String line : ClientProxy.chatHistory) {
+                int idx = line.indexOf(": ");
+                if (idx >= 0 && line.substring(idx + 2)
+                    .equals(playerMsg)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

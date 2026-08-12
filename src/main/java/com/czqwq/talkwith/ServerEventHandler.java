@@ -1,50 +1,66 @@
 package com.czqwq.talkwith;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
-import net.minecraft.util.IChatComponent;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.world.WorldEvent;
 
-import com.czqwq.talkwith.ai.AIClient;
+import com.czqwq.talkwith.ai.SessionAIService;
 import com.czqwq.talkwith.ai.SessionWorldData;
 import com.czqwq.talkwith.ai.SharedSession;
 import com.czqwq.talkwith.network.PacketClientAIRequest;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketHandshake;
+import com.czqwq.talkwith.network.PacketOpenGui;
 import com.czqwq.talkwith.network.PacketSessionBroadcast;
+import com.czqwq.talkwith.teams.TeamManager;
+import com.czqwq.talkwith.util.ServerPlayerUtils;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
+import cpw.mods.fml.common.gameevent.TickEvent;
 
 public class ServerEventHandler {
 
     /**
-     * Players who have used {@code /talkwith switch single}.
+     * Players who have used the single-mode override toggle.
      * Their {@code >} chat messages are routed to their local AI even while they remain
      * members of a server session. Cleared via {@link #clearPlayerState(UUID)}.
      */
     public static final Set<UUID> singleModeOverride = new CopyOnWriteArraySet<>();
 
-    /**
-     * Players in takeover mode — all chat messages (no {@code >} prefix needed) are
-     * intercepted and routed according to {@link #chatModes}.
-     */
-    public static final Set<UUID> takeoverPlayers = new CopyOnWriteArraySet<>();
+    /** Tasks queued by worker threads to run on the server thread; drained every server tick. */
+    private static final ConcurrentLinkedQueue<Runnable> serverTasks = new ConcurrentLinkedQueue<>();
 
     /**
-     * Per-player chat mode while in takeover: {@code "ai"} (default), {@code "group"},
-     * or {@code "public"}.
+     * Marshals a task onto the server thread (safe to call from any thread). Needed because
+     * AI callbacks run on {@link com.czqwq.talkwith.ai.AIClient}'s executor thread but must
+     * mutate server state / send packets on the server thread. Mirrors
+     * {@link ClientProxy#scheduleOnMainThread} for the client.
      */
-    public static final Map<UUID, String> chatModes = new ConcurrentHashMap<>();
+    public static void scheduleOnServerThread(Runnable r) {
+        serverTasks.add(r);
+    }
+
+    @SubscribeEvent
+    public void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        Runnable r;
+        while ((r = serverTasks.poll()) != null) {
+            try {
+                r.run();
+            } catch (Exception e) {
+                TalkWith.LOG.error("Server thread task error", e);
+            }
+        }
+    }
 
     // -------------------------------------------------------------------------
     // Player login / logout
@@ -65,6 +81,14 @@ public class ServerEventHandler {
         // result) and guarantees sessions are available regardless of event ordering.
         SessionWorldData.restore();
 
+        // Ensure every player has a team (creates a solo team on first join).
+        TeamManager.getOrCreateTeam(player.getCommandSenderName(), playerUuid);
+
+        // Always consume a persisted single-override entry — even if the session restore
+        // below fails. Otherwise a stale entry would silently re-activate the override in
+        // a session the player never switched.
+        boolean hadOverride = SessionWorldData.singleOverrideSet.remove(playerUuid);
+
         // Restore previous session if the player disconnected while in one.
         // Use a silent packet so the GUI does not auto-open on every login.
         // Atomically remove the mapping so no other thread can race on it.
@@ -75,19 +99,18 @@ public class ServerEventHandler {
             SharedSession session = SharedSession.sessions.get(lastSessionId);
             if (session != null) {
                 session.players.add(playerUuid);
-                // silent=true: only update currentSessionId on the client, no GUI popup.
-                // Include the session name so the notification shows "test" instead of a UUID.
-                PacketHandler.INSTANCE.sendTo(
-                    new com.czqwq.talkwith.network.PacketOpenGui(lastSessionId, true, session.sessionName),
-                    player);
-                // Restore single-override state if it was persisted on logout
-                if (SessionWorldData.singleOverrideSet.remove(playerUuid)) {
+                // Refresh the owner's display name if this player is the owner.
+                if (session.ownerUuid.equals(playerUuid)) {
+                    session.ownerName = player.getCommandSenderName();
+                }
+                if (hadOverride) {
                     singleModeOverride.add(playerUuid);
                 }
+                // silent=true: only update client state, no GUI popup.
+                PacketHandler.INSTANCE
+                    .sendTo(new PacketOpenGui(lastSessionId, true, session.sessionName, hadOverride), player);
                 SessionWorldData.save();
                 // Re-send recent history silently so the client's chatHistory is pre-populated.
-                // This means the GUI will show context immediately when the player opens it,
-                // matching the behaviour they get when using /talkwith session join.
                 for (String[] entry : session.recentMessages) {
                     PacketHandler.INSTANCE
                         .sendTo(PacketSessionBroadcast.historyOnly(entry[0], entry[1], entry[2]), player);
@@ -115,7 +138,6 @@ public class ServerEventHandler {
             SessionWorldData.playerSessionMap.put(playerUuid, session.sessionId);
             session.players.remove(playerUuid);
             // Session stays alive — ownership is NOT auto-transferred on logout.
-            // The owner must explicitly use /talkwith session transfer <player> first.
             SessionWorldData.save();
             break;
         }
@@ -159,34 +181,16 @@ public class ServerEventHandler {
             return;
         }
 
-        boolean hasTakeover = takeoverPlayers.contains(playerUuid);
-
-        // Let normal chat through if neither prefix nor takeover
-        if (!hasPrefix && !hasTakeover) return;
+        // Let normal chat through without the "> " prefix.
+        if (!hasPrefix) return;
 
         event.setCanceled(true);
-
-        if (hasPrefix) {
-            // Explicit "> " prefix always routes to AI regardless of takeover chat-mode
-            routeToAI(
-                player,
-                playerUuid,
-                playerName,
-                msg.substring(2)
-                    .trim());
-            return;
-        }
-
-        // Takeover mode (no prefix): route by chat-mode
-        String mode = chatModes.getOrDefault(playerUuid, "ai");
-        if ("public".equals(mode)) {
-            broadcastPublicChat(playerName, msg);
-        } else if ("group".equals(mode)) {
-            routeToGroup(player, playerUuid, playerName, msg);
-        } else {
-            // "ai" (default)
-            routeToAI(player, playerUuid, playerName, msg);
-        }
+        routeToAI(
+            player,
+            playerUuid,
+            playerName,
+            msg.substring(2)
+                .trim());
     }
 
     // -------------------------------------------------------------------------
@@ -201,17 +205,15 @@ public class ServerEventHandler {
      * interprets as "just open the GUI".
      */
     private void openGuiForPlayer(EntityPlayerMP player, UUID playerUuid, String playerName) {
-        SharedSession foundSession = null;
-        for (SharedSession s : SharedSession.sessions.values()) {
-            if (s.hasPlayer(playerUuid)) {
-                foundSession = s;
-                break;
-            }
-        }
+        SharedSession foundSession = SharedSession.findByPlayer(playerUuid);
         boolean useLocalAI = (foundSession == null) || singleModeOverride.contains(playerUuid);
         if (!useLocalAI) {
             PacketHandler.INSTANCE.sendTo(
-                new com.czqwq.talkwith.network.PacketOpenGui(foundSession.sessionId, false, foundSession.sessionName),
+                new PacketOpenGui(
+                    foundSession.sessionId,
+                    false,
+                    foundSession.sessionName,
+                    singleModeOverride.contains(playerUuid)),
                 player);
         } else {
             // PacketClientAIRequest with empty message signals "open GUI, no AI call"
@@ -225,109 +227,21 @@ public class ServerEventHandler {
 
     private void routeToAI(EntityPlayerMP player, UUID playerUuid, String playerName, String text) {
         // Find the session this player belongs to (if any)
-        SharedSession foundSession = null;
-        for (SharedSession s : SharedSession.sessions.values()) {
-            if (s.hasPlayer(playerUuid)) {
-                foundSession = s;
-                break;
-            }
-        }
+        SharedSession foundSession = SharedSession.findByPlayer(playerUuid);
 
         // If in a session but single-override is active (or no session), use local AI
         boolean useLocalAI = (foundSession == null) || singleModeOverride.contains(playerUuid);
 
         if (!useLocalAI) {
             final SharedSession session = foundSession;
-
-            if (session.isMuted(playerUuid)) {
+            String errorKey = SessionAIService.tryRequest(session, player, text);
+            if (errorKey != null) {
                 player.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r ")
-                        .appendSibling(new ChatComponentTranslation("talkwith.session.muted")));
-                return;
+                    new ChatComponentText("§c[TalkWith]§r ").appendSibling(new ChatComponentTranslation(errorKey)));
             }
-
-            if (session.isCooldownActive()) {
-                long remaining = (session.cooldown * 1000L - (System.currentTimeMillis() - session.lastReplyTime))
-                    / 1000 + 1;
-                player.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r ")
-                        .appendSibling(new ChatComponentTranslation("talkwith.session.cooldown", remaining)));
-                return;
-            }
-
-            // Prevent concurrent AI requests for the same session (race condition guard)
-            if (!session.isProcessing.compareAndSet(false, true)) {
-                player.addChatMessage(
-                    new ChatComponentText("§c[TalkWith]§r ")
-                        .appendSibling(new ChatComponentTranslation("talkwith.session.processing")));
-                return;
-            }
-
-            final MinecraftServer server = MinecraftServer.getServer();
-            session.session.addMessage("user", playerName + ": " + text);
-            String prompt = Config.loadPromptFromFile(session.sessionPromptFile);
-            int maxHist = session.sessionMaxHistory > 0 ? session.sessionMaxHistory : Config.maxHistory;
-            AIClient.sendAsync(
-                session.session.getMessages(prompt, maxHist),
-                session.ownerBaseUrl,
-                session.ownerApiKey,
-                session.sessionModel,
-                reply -> {
-                    session.isProcessing.set(false);
-                    session.session.addMessage("assistant", reply);
-                    session.lastReplyTime = System.currentTimeMillis();
-                    session.lastActivity = session.lastReplyTime;
-                    session.addRecentMessage(playerName, text, reply);
-                    SessionWorldData.save();
-                    broadcastToSession(session, playerName, text, reply, server);
-                },
-                err -> {
-                    session.isProcessing.set(false);
-                    broadcastErrorToSession(session, err, server);
-                });
         } else {
             // No session or single-mode override: delegate to the client for local AI processing
             PacketHandler.INSTANCE.sendTo(new PacketClientAIRequest(playerName, text), player);
-        }
-    }
-
-    /**
-     * Broadcasts a message to all online players as plain chat (mimics vanilla chat format).
-     * Used in takeover {@code public} mode.
-     */
-    @SuppressWarnings("unchecked")
-    private void broadcastPublicChat(String playerName, String text) {
-        MinecraftServer server = MinecraftServer.getServer();
-        if (server == null) return;
-        ChatComponentText chatMsg = new ChatComponentText("<" + playerName + "> " + text);
-        for (Object obj : server.getConfigurationManager().playerEntityList) {
-            ((EntityPlayerMP) obj).addChatMessage(chatMsg);
-        }
-    }
-
-    /**
-     * Broadcasts a message only to the player's current session members (no AI involvement).
-     * Used in takeover {@code group} mode so the conversation stays private to the group.
-     */
-    private void routeToGroup(EntityPlayerMP player, UUID playerUuid, String playerName, String text) {
-        SharedSession foundSession = null;
-        for (SharedSession s : SharedSession.sessions.values()) {
-            if (s.hasPlayer(playerUuid)) {
-                foundSession = s;
-                break;
-            }
-        }
-        if (foundSession == null) {
-            player.addChatMessage(
-                new ChatComponentText("§c[TalkWith]§r ")
-                    .appendSibling(new ChatComponentTranslation("talkwith.takeover.group.no_session")));
-            return;
-        }
-        MinecraftServer server = MinecraftServer.getServer();
-        IChatComponent chatMsg = new ChatComponentTranslation("talkwith.chat.group_format", playerName, text);
-        for (UUID uuid : foundSession.players) {
-            EntityPlayerMP member = getPlayerByUUID(server, uuid);
-            if (member != null) member.addChatMessage(chatMsg);
         }
     }
 
@@ -339,7 +253,7 @@ public class ServerEventHandler {
         MinecraftServer server) {
         PacketSessionBroadcast packet = new PacketSessionBroadcast(playerName, playerMsg, reply);
         for (UUID uuid : session.players) {
-            EntityPlayerMP member = getPlayerByUUID(server, uuid);
+            EntityPlayerMP member = ServerPlayerUtils.getPlayerByUUID(server, uuid);
             if (member != null) {
                 PacketHandler.INSTANCE.sendTo(packet, member);
             }
@@ -349,7 +263,7 @@ public class ServerEventHandler {
     public static void broadcastErrorToSession(SharedSession session, String err, MinecraftServer server) {
         PacketSessionBroadcast errorPacket = PacketSessionBroadcast.error(err);
         for (UUID uuid : session.players) {
-            EntityPlayerMP member = getPlayerByUUID(server, uuid);
+            EntityPlayerMP member = ServerPlayerUtils.getPlayerByUUID(server, uuid);
             if (member != null) {
                 PacketHandler.INSTANCE.sendTo(errorPacket, member);
             }
@@ -366,17 +280,5 @@ public class ServerEventHandler {
      */
     public static void clearPlayerState(UUID uuid) {
         singleModeOverride.remove(uuid);
-        takeoverPlayers.remove(uuid);
-        chatModes.remove(uuid);
-    }
-
-    @SuppressWarnings("unchecked")
-    public static EntityPlayerMP getPlayerByUUID(MinecraftServer server, UUID uuid) {
-        for (Object obj : server.getConfigurationManager().playerEntityList) {
-            EntityPlayerMP p = (EntityPlayerMP) obj;
-            if (p.getUniqueID()
-                .equals(uuid)) return p;
-        }
-        return null;
     }
 }

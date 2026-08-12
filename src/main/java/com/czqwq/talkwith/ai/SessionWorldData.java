@@ -28,9 +28,7 @@ import com.czqwq.talkwith.TalkWith;
  *
  * <p>
  * <b>Loading:</b> call {@link #restore()} from a {@code WorldEvent.Load} handler once the
- * overworld (dimension 0) is available. If the world data file does not yet exist (e.g. first
- * run, or migration from an older version) {@link SessionPersistence#loadAll()} is called as a
- * one-time fallback to import any JSON files from {@code config/talkwith/sessions/}.
+ * overworld (dimension 0) is available.
  */
 public class SessionWorldData extends WorldSavedData {
 

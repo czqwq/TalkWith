@@ -28,22 +28,12 @@ public class SharedSession {
     /** Unix timestamp (ms) of the last AI reply. Used to sort the session list. */
     public volatile long lastActivity = 0;
     public final Set<UUID> players = new CopyOnWriteArraySet<>();
-    public final Set<UUID> mutedPlayers = new CopyOnWriteArraySet<>();
-    /** Players granted moderator privileges by the owner. */
-    public final Set<UUID> moderators = new CopyOnWriteArraySet<>();
-    /** Pending join requests for private sessions. Approved via {@code /talkwith session accept}. */
-    public final Set<UUID> joinRequests = new CopyOnWriteArraySet<>();
     public final ChatSession session = new ChatSession();
-    public volatile int cooldown;
     public volatile String ownerBaseUrl;
     public volatile String ownerApiKey;
     public volatile String sessionModel;
     /** Per-session max history pair count. 0 means use the global {@link com.czqwq.talkwith.Config#maxHistory}. */
     public volatile int sessionMaxHistory = 0;
-    /** If false, only players in {@link #invitedPlayers} may join. Defaults to true (public). */
-    public volatile boolean isPublic = true;
-    /** Pending invitations for private sessions. Consumed (removed) when the player joins. */
-    public final Set<UUID> invitedPlayers = new CopyOnWriteArraySet<>();
     /**
      * Guards against concurrent AI requests for the same session.
      * Set to {@code true} when an AI request is in-flight; cleared in the reply/error callback.
@@ -65,7 +55,6 @@ public class SharedSession {
         this.ownerBaseUrl = baseUrl;
         this.ownerApiKey = apiKey;
         this.sessionModel = model != null ? model : "";
-        this.cooldown = com.czqwq.talkwith.Config.replyCooldown;
         players.add(ownerUuid);
     }
 
@@ -74,14 +63,13 @@ public class SharedSession {
      * The {@code players} set is intentionally left empty; members must rejoin after a restart.
      */
     public SharedSession(String sessionId, UUID ownerUuid, String ownerName, String baseUrl, String apiKey,
-        String model, int cooldown) {
+        String model) {
         this.sessionId = sessionId;
         this.ownerUuid = ownerUuid;
         this.ownerName = ownerName;
         this.ownerBaseUrl = baseUrl;
         this.ownerApiKey = apiKey;
         this.sessionModel = model != null ? model : "";
-        this.cooldown = cooldown;
         // players intentionally empty — members must rejoin after server restart
     }
 
@@ -93,23 +81,24 @@ public class SharedSession {
         }
     }
 
-    public boolean isCooldownActive() {
-        return System.currentTimeMillis() - lastReplyTime < cooldown * 1000L;
-    }
-
-    public boolean isMuted(UUID uuid) {
-        return mutedPlayers.contains(uuid);
-    }
-
-    public boolean isMod(UUID uuid) {
-        return moderators.contains(uuid);
-    }
-
-    public boolean isOwnerOrMod(UUID uuid) {
-        return ownerUuid.equals(uuid) || moderators.contains(uuid);
-    }
-
     public boolean hasPlayer(UUID uuid) {
         return players.contains(uuid);
+    }
+
+    /** Returns the session the given player is a member of, or {@code null}. */
+    public static SharedSession findByPlayer(UUID uuid) {
+        for (SharedSession s : sessions.values()) {
+            if (s.hasPlayer(uuid)) return s;
+        }
+        return null;
+    }
+
+    /** Returns the session with the given (case-insensitive) name, or {@code null}. */
+    public static SharedSession findByName(String name) {
+        if (name == null || name.isEmpty()) return null;
+        for (SharedSession s : sessions.values()) {
+            if (!s.sessionName.isEmpty() && s.sessionName.equalsIgnoreCase(name)) return s;
+        }
+        return null;
     }
 }

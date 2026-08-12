@@ -1,8 +1,8 @@
 package com.czqwq.talkwith.network;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.util.StatCollector;
 
+import com.cleanroommc.modularui.factory.ClientGUI;
 import com.czqwq.talkwith.ClientProxy;
 import com.czqwq.talkwith.gui.GuiAIChat;
 import com.czqwq.talkwith.util.TextUtils;
@@ -14,8 +14,8 @@ import cpw.mods.fml.common.network.simpleimpl.MessageContext;
 import io.netty.buffer.ByteBuf;
 
 /**
- * Server → Client: sets the client's current session ID.
- * Sending an empty string clears it (returns to client/single mode).
+ * Server → Client: sets the client's current session ID and single-override state.
+ * Sending an empty string clears the session (returns to client/single mode).
  *
  * <p>
  * When {@link #silent} is {@code true} (used on player login to restore a previous session),
@@ -35,25 +35,28 @@ public class PacketOpenGui implements IMessage {
      * Empty string means the session has no name (UUID will be shown as fallback).
      */
     public String sessionName;
+    /** Whether the player has the single-mode override active in this session. */
+    public boolean singleOverride;
 
     public PacketOpenGui() {}
 
     public PacketOpenGui(String sessionId) {
-        this.sessionId = sessionId != null ? sessionId : "";
-        this.silent = false;
-        this.sessionName = "";
+        this(sessionId, false, "", false);
     }
 
     public PacketOpenGui(String sessionId, boolean silent) {
-        this.sessionId = sessionId != null ? sessionId : "";
-        this.silent = silent;
-        this.sessionName = "";
+        this(sessionId, silent, "", false);
     }
 
     public PacketOpenGui(String sessionId, boolean silent, String sessionName) {
+        this(sessionId, silent, sessionName, false);
+    }
+
+    public PacketOpenGui(String sessionId, boolean silent, String sessionName, boolean singleOverride) {
         this.sessionId = sessionId != null ? sessionId : "";
         this.silent = silent;
         this.sessionName = sessionName != null ? sessionName : "";
+        this.singleOverride = singleOverride;
     }
 
     @Override
@@ -61,6 +64,7 @@ public class PacketOpenGui implements IMessage {
         sessionId = ByteBufUtils.readUTF8String(buf);
         silent = buf.readBoolean();
         sessionName = ByteBufUtils.readUTF8String(buf);
+        singleOverride = buf.readBoolean();
     }
 
     @Override
@@ -68,6 +72,7 @@ public class PacketOpenGui implements IMessage {
         ByteBufUtils.writeUTF8String(buf, sessionId != null ? sessionId : "");
         buf.writeBoolean(silent);
         ByteBufUtils.writeUTF8String(buf, sessionName != null ? sessionName : "");
+        buf.writeBoolean(singleOverride);
     }
 
     public static class Handler implements IMessageHandler<PacketOpenGui, IMessage> {
@@ -77,18 +82,20 @@ public class PacketOpenGui implements IMessage {
             final String sid = msg.sessionId;
             final boolean isSilent = msg.silent;
             final String sName = msg.sessionName != null ? msg.sessionName : "";
+            final boolean override = msg.singleOverride;
             ClientProxy.scheduleOnMainThread(() -> {
                 if (sid == null || sid.isEmpty()) {
                     ClientProxy.currentSessionId = null;
+                    ClientProxy.isSingleOverride = false;
                     // Close the GUI if it is currently open for a session
                     if (ClientProxy.activeGui != null) {
-                        Minecraft.getMinecraft()
-                            .displayGuiScreen(null);
+                        ClientGUI.close();
                     }
                     return;
                 }
-                // Always update the session ID
+                // Always update the session ID and override state
                 ClientProxy.currentSessionId = sid;
+                ClientProxy.isSingleOverride = override;
                 // Prefer the human-readable session name; fall back to UUID.
                 String displayName = sName.isEmpty() ? sid : sName;
                 if (isSilent) {
@@ -96,17 +103,13 @@ public class PacketOpenGui implements IMessage {
                     TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.gui.session_joined", displayName));
                     return;
                 }
-                if (ClientProxy.useVanillaGui) {
+                if (ClientProxy.useVanillaGui()) {
                     // Vanilla mode: just update the session ID and notify via chat
                     TextUtils.info(StatCollector.translateToLocalFormatted("talkwith.gui.session_joined", displayName));
                 } else {
                     // Open the GUI if it is not already open
                     if (ClientProxy.activeGui == null) {
-                        Minecraft.getMinecraft()
-                            .displayGuiScreen(new GuiAIChat(""));
-                    } else {
-                        // Update the session ID on the already-open GUI
-                        ClientProxy.activeGui.currentSessionId = sid;
+                        ClientGUI.open(new GuiAIChat());
                     }
                 }
             });

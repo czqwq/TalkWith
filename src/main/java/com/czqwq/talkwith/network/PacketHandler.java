@@ -1,5 +1,8 @@
 package com.czqwq.talkwith.network;
 
+import com.czqwq.talkwith.network.teams.PacketTeamDataSync;
+import com.czqwq.talkwith.network.teams.PacketTeamInfoSync;
+
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.network.NetworkRegistry;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -19,14 +22,6 @@ public class PacketHandler {
      * reject them as duplicate handler names.
      */
     public static final class NoOpHandshake<M extends IMessage> implements IMessageHandler<M, IMessage> {
-
-        @Override
-        public IMessage onMessage(M message, MessageContext ctx) {
-            return null;
-        }
-    }
-
-    public static final class NoOpShareInvite<M extends IMessage> implements IMessageHandler<M, IMessage> {
 
         @Override
         public IMessage onMessage(M message, MessageContext ctx) {
@@ -58,6 +53,38 @@ public class PacketHandler {
         }
     }
 
+    public static final class NoOpTeamInfoSync<M extends IMessage> implements IMessageHandler<M, IMessage> {
+
+        @Override
+        public IMessage onMessage(M message, MessageContext ctx) {
+            return null;
+        }
+    }
+
+    public static final class NoOpTeamDataSync<M extends IMessage> implements IMessageHandler<M, IMessage> {
+
+        @Override
+        public IMessage onMessage(M message, MessageContext ctx) {
+            return null;
+        }
+    }
+
+    public static final class NoOpSessionSettings<M extends IMessage> implements IMessageHandler<M, IMessage> {
+
+        @Override
+        public IMessage onMessage(M message, MessageContext ctx) {
+            return null;
+        }
+    }
+
+    public static final class NoOpPromptData<M extends IMessage> implements IMessageHandler<M, IMessage> {
+
+        @Override
+        public IMessage onMessage(M message, MessageContext ctx) {
+            return null;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public static void init() {
         INSTANCE = NetworkRegistry.INSTANCE.newSimpleChannel(CHANNEL);
@@ -74,11 +101,7 @@ public class PacketHandler {
             PacketHandshake.class,
             0,
             Side.CLIENT);
-        INSTANCE.registerMessage(
-            isClient ? PacketShareInvite.Handler.class : (Class) NoOpShareInvite.class,
-            PacketShareInvite.class,
-            1,
-            Side.CLIENT);
+        // Discriminator 1 freed (was PacketShareInvite, removed — team system replaced session invites)
         INSTANCE.registerMessage(
             isClient ? PacketOpenGui.Handler.class : (Class) NoOpOpenGui.class,
             PacketOpenGui.class,
@@ -97,10 +120,39 @@ public class PacketHandler {
 
         INSTANCE.registerMessage(PacketSessionControl.Handler.class, PacketSessionControl.class, 6, Side.SERVER);
 
+        // Client-bound reply to the "setting_get" request (session AI settings for the settings GUI).
+        INSTANCE.registerMessage(
+            isClient ? PacketSessionSettings.Handler.class : (Class) NoOpSessionSettings.class,
+            PacketSessionSettings.class,
+            10,
+            Side.CLIENT);
+
+        // Client-bound prompt management replies (list / content).
+        INSTANCE.registerMessage(
+            isClient ? PacketPromptData.Handler.class : (Class) NoOpPromptData.class,
+            PacketPromptData.class,
+            11,
+            Side.CLIENT);
+
+        // Server-bound prompt write request (name + content; owner only).
+        INSTANCE.registerMessage(PacketPromptWrite.Handler.class, PacketPromptWrite.class, 12, Side.SERVER);
+
         INSTANCE.registerMessage(
             isClient ? PacketClientAIRequest.Handler.class : (Class) NoOpClientAIRequest.class,
             PacketClientAIRequest.class,
             7,
+            Side.CLIENT);
+
+        // Team system packets (CLIENT-bound)
+        INSTANCE.registerMessage(
+            isClient ? PacketTeamInfoSync.Handler.class : (Class) NoOpTeamInfoSync.class,
+            PacketTeamInfoSync.class,
+            8,
+            Side.CLIENT);
+        INSTANCE.registerMessage(
+            isClient ? PacketTeamDataSync.Handler.class : (Class) NoOpTeamDataSync.class,
+            PacketTeamDataSync.class,
+            9,
             Side.CLIENT);
     }
 }

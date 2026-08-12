@@ -1,277 +1,213 @@
 package com.czqwq.talkwith.gui;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.util.StatCollector;
 
 import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
 
+import com.cleanroommc.modularui.api.UpOrDown;
+import com.cleanroommc.modularui.api.drawable.IKey;
+import com.cleanroommc.modularui.api.widget.IGuiAction;
+import com.cleanroommc.modularui.api.widget.Interactable;
+import com.cleanroommc.modularui.drawable.Rectangle;
+import com.cleanroommc.modularui.drawable.Stencil;
+import com.cleanroommc.modularui.screen.CustomModularScreen;
+import com.cleanroommc.modularui.screen.ModularPanel;
+import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
+import com.cleanroommc.modularui.theme.WidgetThemeEntry;
+import com.cleanroommc.modularui.value.StringValue;
+import com.cleanroommc.modularui.widget.Widget;
+import com.cleanroommc.modularui.widgets.ButtonWidget;
+import com.cleanroommc.modularui.widgets.TextWidget;
+import com.cleanroommc.modularui.widgets.textfield.TextFieldWidget;
 import com.czqwq.talkwith.ClientProxy;
-import com.czqwq.talkwith.Config;
 import com.czqwq.talkwith.TalkWith;
 import com.czqwq.talkwith.ai.AIClient;
+import com.czqwq.talkwith.client.SessionClient;
 import com.czqwq.talkwith.network.PacketHandler;
 import com.czqwq.talkwith.network.PacketSessionMessage;
+import com.czqwq.talkwith.util.TextUtils;
 
-public class GuiAIChat extends GuiScreen {
+public class GuiAIChat extends CustomModularScreen {
 
-    /** Height of the input field. */
-    private static final int INPUT_HEIGHT = 20;
-    /** Vertical padding above the input field. */
-    private static final int INPUT_PAD = 2;
-    /** Horizontal margin. */
-    private static final int MARGIN = 4;
+    /** Timeout for the "AI is thinking" indicator when no reply arrives. */
+    private static final long THINKING_TIMEOUT_MS = 60_000L;
 
-    /**
-     * Cached reflection handle for {@code FontRenderer.unicodeFlag}.
-     * The field is private in GTNH's Forge build, so we must use reflection to
-     * force Unicode glyph page rendering for non-ASCII text.
-     */
-    private static final Field UNICODE_FLAG_FIELD;
+    final List<String> lines = new ArrayList<>();
+    boolean isThinking;
+    int thinkingTick;
+    long thinkingSince;
+    int scrollOffset;
 
-    static {
-        Field f = null;
-        try {
-            f = FontRenderer.class.getDeclaredField("unicodeFlag");
-            f.setAccessible(true);
-        } catch (Exception e) {
-            TalkWith.LOG.warn("Could not access FontRenderer.unicodeFlag via reflection: " + e.getMessage());
-        }
-        UNICODE_FLAG_FIELD = f;
-    }
-
-    private boolean getUnicodeFlag() {
-        if (UNICODE_FLAG_FIELD == null) return false;
-        try {
-            return UNICODE_FLAG_FIELD.getBoolean(fontRendererObj);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private void setUnicodeFlag(boolean value) {
-        if (UNICODE_FLAG_FIELD == null) return;
-        try {
-            UNICODE_FLAG_FIELD.setBoolean(fontRendererObj, value);
-        } catch (Exception e) {
-            // ignore – rendering will fall back to whatever the font renderer defaults to
-        }
-    }
-
-    private final List<String> lines = new ArrayList<>();
-    private GuiTextField inputField;
-    private final String initialText;
-    private boolean isThinking = false;
-    private int thinkingTick = 0;
-    public String currentSessionId = null;
-    /**
-     * Scroll offset in lines. 0 = bottom (most recent). Positive values scroll up.
-     * Clamped during draw to the valid range.
-     */
-    private int scrollOffset = 0;
-
-    public GuiAIChat(String initialText) {
-        this.initialText = initialText;
-        this.currentSessionId = ClientProxy.currentSessionId;
-        // Initialise from the shared persistent history so older messages are visible
+    public GuiAIChat() {
+        super(TalkWith.MODID);
         this.lines.addAll(ClientProxy.chatHistory);
     }
 
     @Override
-    public void initGui() {
-        // Input field sits at the very bottom, full width minus margins
-        inputField = new GuiTextField(
-            fontRendererObj,
-            MARGIN,
-            height - INPUT_HEIGHT - INPUT_PAD,
-            width - MARGIN * 2,
-            INPUT_HEIGHT);
-        inputField.setMaxStringLength(512);
-        inputField.setFocused(true);
-        // Register this as the active GUI so packet handlers can push messages into it
+    public ModularPanel buildUI(ModularGuiContext context) {
+        int W = Math.max(300, getScreenWidth() - 20);
+        int H = Math.max(200, getScreenHeight() - 30);
+        int CHAT_W = W - 14;
+        int CHAT_H = H - 100;
+
+        ModularPanel panel = ModularPanel.defaultPanel("ai_chat", W, H);
+        // disableHoverThemeBackground: otherwise the theme's opaque hover background
+        // replaces this panel background when the mouse is over the GUI.
+        panel.background(new Rectangle().color(0xCC16213e, 0xCC16213e, 0xCC1a1a2e, 0xCC1a1a2e))
+            .disableHoverThemeBackground(true);
+        panel.padding(6);
         ClientProxy.activeGui = this;
-        if (initialText != null && !initialText.isEmpty()) {
-            inputField.setText(initialText);
-            sendMessage();
-        }
-    }
 
-    @Override
-    public void onGuiClosed() {
-        if (ClientProxy.activeGui == this) {
-            ClientProxy.activeGui = null;
-        }
-    }
+        // Title bar — dynamic so it picks up the session id (set after construction).
+        TextWidget<?> titleBg = new TextWidget<>("");
+        titleBg.pos(0, 0)
+            .size(W, 14);
+        titleBg.background(new Rectangle().color(0x881a1a2e))
+            .disableHoverThemeBackground(true);
+        panel.child(titleBg);
+        TextWidget<?> title = new TextWidget<>(IKey.dynamic(this::getTitleText));
+        title.left(6)
+            .top(3)
+            .color(0xFFf0a500);
+        panel.child(title);
 
-    @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        // Enable the Unicode glyph pages for this entire draw pass so that
-        // Chinese and other non-ASCII characters render correctly instead of
-        // appearing as squares or garbage.
-        boolean savedUnicode = getUnicodeFlag();
-        setUnicodeFlag(true);
-        try {
-            drawScreenInternal(mouseX, mouseY, partialTicks);
-        } finally {
-            setUnicodeFlag(savedUnicode);
-        }
-    }
+        // Chat area
+        ChatAreaWidget chat = new ChatAreaWidget();
+        chat.pos(0, 16)
+            .size(CHAT_W, CHAT_H);
+        panel.child(chat);
 
-    private void drawScreenInternal(int mouseX, int mouseY, float partialTicks) {
-        int lineHeight = fontRendererObj.FONT_HEIGHT + 2;
+        // Input row
+        StringValue inputValue = new StringValue("");
+        TextFieldWidget input = new TextFieldWidget();
+        input.value(inputValue);
+        // Without this, the typed text only lands in inputValue when the field loses
+        // focus (TextFieldWidget.onRemoveFocus). The Enter listener below reads
+        // inputValue BEFORE the key reaches the field, so it would always see the
+        // stale value and never send. autoUpdateOnChange keeps the value live.
+        input.autoUpdateOnChange(true);
+        input.pos(0, H - 30)
+            .size(CHAT_W - 56, 20);
+        input.setFocusOnGuiOpen(true);
+        panel.child(input);
+        ButtonWidget<?> sendBtn = new ButtonWidget<>();
+        sendBtn.child(new TextWidget<>(StatCollector.translateToLocal("talkwith.gui.send")).center());
+        sendBtn.right(6)
+            .top(H - 30)
+            .size(50, 20);
+        sendBtn.onMouseTapped(btn -> {
+            if (sendMessage(inputValue.getStringValue())) inputValue.setValue("");
+            return true;
+        });
+        panel.child(sendBtn);
 
-        // Dynamically compute how many lines fit above the input field
-        int inputTop = height - INPUT_HEIGHT - INPUT_PAD * 2;
-        int maxVisibleLines = Math.max(1, (inputTop - 4) / lineHeight);
-
-        // Gather the lines to display (thinking indicator counts as one line)
-        List<String> display = buildDisplayLines(lineHeight);
-
-        // Clamp scrollOffset to valid range
-        int maxScroll = Math.max(0, display.size() - maxVisibleLines);
-        if (scrollOffset < 0) scrollOffset = 0;
-        if (scrollOffset > maxScroll) scrollOffset = maxScroll;
-
-        // Determine which slice of lines to show
-        // scrollOffset 0 = show bottom maxVisibleLines; higher = scroll up
-        int bottomIdx = display.size() - scrollOffset;
-        int topIdx = Math.max(0, bottomIdx - maxVisibleLines);
-        int visibleCount = bottomIdx - topIdx;
-
-        // Compute the bounding box of just the visible content area
-        int chatAreaHeight = visibleCount * lineHeight;
-
-        // Y coordinate where the chat text area starts (above the input row)
-        int chatAreaBottom = inputTop - 2; // small gap between chat and input
-        int chatAreaTop = chatAreaBottom - chatAreaHeight;
-
-        // Draw the entire pane: semi-transparent dark background (vanilla-like)
-        if (visibleCount > 0) {
-            drawRect(0, chatAreaTop - 2, width, chatAreaBottom, 0x90000000);
-        }
-        // Draw slightly more opaque background for input area
-        drawRect(0, inputTop - 2, width, height, 0xB0000000);
-        // Separator line between chat and input
-        drawRect(0, inputTop - 2, width, inputTop - 1, 0xFF555555);
-
-        // Render visible lines from bottom up
-        int y = chatAreaBottom - lineHeight;
-        for (int i = bottomIdx - 1; i >= topIdx; i--) {
-            fontRendererObj.drawStringWithShadow(display.get(i), MARGIN, y, 0xFFFFFF);
-            y -= lineHeight;
-        }
-
-        // Scroll indicator: show "▲ N more" when scrolled up
-        if (scrollOffset > 0) {
-            String scrollHint = StatCollector.translateToLocalFormatted("talkwith.gui.scroll_hint", scrollOffset);
-            fontRendererObj.drawStringWithShadow(scrollHint, MARGIN, chatAreaTop - lineHeight - 2, 0xAAAAAA);
-        }
-
-        inputField.drawTextBox();
-        super.drawScreen(mouseX, mouseY, partialTicks);
-    }
-
-    /**
-     * Build the list of display lines, wrapping long lines and appending the
-     * thinking indicator when applicable.
-     */
-    private List<String> buildDisplayLines(int lineHeight) {
-        List<String> display = new ArrayList<>();
-        for (String line : lines) {
-            display.addAll(wrapLine(line, width - MARGIN * 2));
-        }
-        if (isThinking) {
-            StringBuilder dotBuilder = new StringBuilder();
-            int dotCount = (thinkingTick / 10) % 4;
-            for (int d = 0; d < dotCount; d++) dotBuilder.append('.');
-            display.add("§7" + StatCollector.translateToLocal("talkwith.gui.thinking") + dotBuilder);
-        }
-        return display;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> wrapLine(String text, int maxWidth) {
-        if (fontRendererObj.getStringWidth(text) <= maxWidth) {
-            List<String> single = new ArrayList<>();
-            single.add(text);
-            return single;
-        }
-        List<String> wrapped = fontRendererObj.listFormattedStringToWidth(text, maxWidth);
-        // Defensive fallback: if the FontRenderer produced only empty/null segments
-        // (a known issue when lines contain full-width characters such as （）),
-        // return the original line unsplit so it is at least rendered rather than
-        // silently becoming a blank display row.
-        boolean allEmpty = true;
-        for (String s : wrapped) {
-            if (s != null && !s.isEmpty()) {
-                allEmpty = false;
-                break;
+        // Enter-to-send: gui action listeners run before widget key handling.
+        panel.listenGuiAction((IGuiAction.KeyPressed) (typedChar, keyCode) -> {
+            if ((keyCode == Keyboard.KEY_RETURN || keyCode == Keyboard.KEY_NUMPADENTER) && input.isFocused()) {
+                if (sendMessage(inputValue.getStringValue())) {
+                    // Clear BOTH the binding and the field's internal text. The Enter key
+                    // still propagates to the focused field right after this listener, whose
+                    // RETURN handler calls removeFocus() — and onRemoveFocus() commits the
+                    // field's text back into inputValue. Clearing the text first makes that
+                    // commit write "" instead of the just-sent message, so the field empties.
+                    inputValue.setValue("");
+                    input.setText("");
+                    // Re-focus on the next tick so the player can keep typing.
+                    ClientProxy.scheduleOnMainThread(() -> context.focus(input));
+                }
+                return true;
             }
-        }
-        if (allEmpty) {
-            List<String> fallback = new ArrayList<>();
-            fallback.add(text);
-            return fallback;
-        }
-        return wrapped;
+            return false;
+        });
+
+        // Top buttons — text labels instead of emoji glyphs (unrenderable without Angelica).
+        int btnY = H - 52;
+        addTopButton(
+            panel,
+            0,
+            btnY,
+            50,
+            IKey.lang("talkwith.gui.btn.history"),
+            () -> GuiSubPanels.openHistoryPanel(panel, this));
+        addTopButton(
+            panel,
+            52,
+            btnY,
+            52,
+            IKey.lang("talkwith.gui.btn.settings"),
+            () -> GuiSubPanels.openSettingsPanel(panel, this));
+        addTopButton(
+            panel,
+            106,
+            btnY,
+            46,
+            IKey.dynamicKey(
+                () -> IKey.lang(ClientProxy.isSingleOverride ? "talkwith.gui.btn.single" : "talkwith.gui.btn.multi")),
+            () -> {
+                if (ClientProxy.currentSessionId == null) {
+                    TextUtils.error(StatCollector.translateToLocal("talkwith.switch.not_in_session"));
+                    return;
+                }
+                SessionClient.toggleSingleOverride();
+            });
+
+        return panel;
+    }
+
+    private void addTopButton(ModularPanel panel, int x, int y, int w, IKey label, Runnable action) {
+        ButtonWidget<?> btn = new ButtonWidget<>();
+        btn.child(new TextWidget<>(label).center());
+        btn.pos(x, y)
+            .size(w, 18);
+        btn.onMouseTapped(b -> {
+            action.run();
+            return true;
+        });
+        panel.child(btn);
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == 1) { // ESC
-            mc.displayGuiScreen(null);
-        } else if (keyCode == 28) { // ENTER
-            sendMessage();
-        } else {
-            inputField.textboxKeyTyped(typedChar, keyCode);
-        }
+    public void onUpdate() {
+        super.onUpdate();
+        thinkingTick++;
     }
 
-    @Override
-    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
-        super.mouseClicked(mouseX, mouseY, mouseButton);
-        inputField.mouseClicked(mouseX, mouseY, mouseButton);
+    private String getTitleText() {
+        String id = ClientProxy.currentSessionId;
+        return id != null ? (id.length() > 8 ? id.substring(0, 8) + ".." : id)
+            : StatCollector.translateToLocal("talkwith.gui.ai_chat");
     }
 
-    private void sendMessage() {
-        String text = inputField.getText()
-            .trim();
-        if (text.isEmpty()) return;
-
-        addLine("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
-        inputField.setText("");
+    /** @return {@code true} when the message was actually sent. */
+    private boolean sendMessage(String text) {
+        if (text == null || text.trim()
+            .isEmpty()) return false;
+        addLine("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text.trim());
         isThinking = true;
-
-        if (currentSessionId != null) {
-            PacketHandler.INSTANCE.sendToServer(new PacketSessionMessage(currentSessionId, text));
-            // isThinking stays true until appendReply / appendError is called
+        thinkingSince = System.currentTimeMillis();
+        scrollOffset = 0;
+        if (ClientProxy.currentSessionId != null && !ClientProxy.isSingleOverride) {
+            PacketHandler.INSTANCE.sendToServer(new PacketSessionMessage(ClientProxy.currentSessionId, text.trim()));
         } else {
-            doClientAICall(text);
+            doClientAICall(text.trim());
         }
+        return true;
     }
 
-    /**
-     * Adds {@code text} to the local client session and fires an async AI request.
-     * Shared implementation used by both {@link #sendMessage()} and {@link #injectAndSend(String)}.
-     */
     private void doClientAICall(String text) {
         ClientProxy.clientSession.addMessage("user", text);
         AIClient.sendAsync(
-            ClientProxy.clientSession.getMessages(Config.loadPromptFromFile(Config.clientPromptFile)),
+            ClientProxy.clientSession.getMessages(SessionClient.resolvePromptText()),
             reply -> ClientProxy.scheduleOnMainThread(() -> {
                 ClientProxy.clientSession.addMessage("assistant", reply);
-                String prefix = StatCollector.translateToLocal("talkwith.chat.ai_prefix");
-                for (String line : com.czqwq.talkwith.util.TextUtils.buildAIReplyLines(prefix, reply)) {
-                    addLine(line);
-                }
+                for (String l : TextUtils
+                    .buildAIReplyLines(StatCollector.translateToLocal("talkwith.chat.ai_prefix"), reply)) addLine(l);
                 isThinking = false;
-                scrollToBottom();
             }),
             err -> ClientProxy.scheduleOnMainThread(() -> {
                 addLine(StatCollector.translateToLocal("talkwith.chat.error_prefix") + err);
@@ -279,105 +215,115 @@ public class GuiAIChat extends GuiScreen {
             }));
     }
 
-    /**
-     * Called by {@link com.czqwq.talkwith.network.PacketSessionBroadcast.Handler} when the server
-     * broadcasts a completed AI reply for this session.
-     * The packet handler already pushed the content to {@link ClientProxy#chatHistory};
-     * this method only clears the thinking indicator and scrolls to the latest line.
-     */
     public void appendReply(String playerName, String playerMsg, String aiReply) {
-        // Data already added to ClientProxy.chatHistory by PacketSessionBroadcast.Handler;
-        // sync the local lines list with any new entries and scroll to bottom.
         syncLines();
-        isThinking = false;
-        scrollToBottom();
+        Minecraft mc = Minecraft.getMinecraft();
+        if (playerName != null && mc.thePlayer != null && playerName.equals(mc.thePlayer.getCommandSenderName())) {
+            isThinking = false;
+        }
     }
 
-    /**
-     * Called by {@link com.czqwq.talkwith.network.PacketSessionBroadcast.Handler} when the server
-     * broadcasts an AI error for this session.
-     * The packet handler already pushed the error to {@link ClientProxy#chatHistory}.
-     */
     public void appendError(String errorMsg) {
         syncLines();
         isThinking = false;
     }
 
-    /**
-     * Injects a user message and fires an async AI request. Used when the server routes a
-     * {@code >} command back to the client for local AI processing (single mode via chat).
-     */
     public void injectAndSend(String text) {
         addLine("§e" + StatCollector.translateToLocal("talkwith.gui.you") + ": §f" + text);
         isThinking = true;
+        thinkingSince = System.currentTimeMillis();
+        scrollOffset = 0;
         doClientAICall(text);
     }
 
-    /**
-     * Appends {@code line} to both the persistent {@link ClientProxy#chatHistory} and the
-     * local {@link #lines} list so the GUI and future GUI instances both see it.
-     */
-    private void addLine(String line) {
+    public void addLine(String line) {
         ClientProxy.addToChatHistory(line);
         lines.add(line);
     }
 
-    /**
-     * Brings the local {@link #lines} list in sync with {@link ClientProxy#chatHistory}.
-     * Called after the packet handler has pushed new content to the shared history.
-     */
-    private void syncLines() {
-        if (lines.size() < ClientProxy.chatHistory.size()) {
-            // Append only the entries that are newer than what we already have
-            int newStart = lines.size();
-            List<String> history = ClientProxy.chatHistory;
-            for (int i = newStart; i < history.size(); i++) {
-                lines.add(history.get(i));
+    /** Clears the GUI-side line cache (the shared history is cleared by the caller). */
+    public void clearLines() {
+        lines.clear();
+    }
+
+    public void syncLines() {
+        // Compare content, not just size: equal sizes can still diverge if history was
+        // replaced (e.g. historyOnly replay) while the GUI stayed open.
+        List<String> hist = ClientProxy.chatHistory;
+        if (lines.size() != hist.size() || !lines.equals(hist)) {
+            lines.clear();
+            lines.addAll(hist);
+        }
+    }
+
+    @Override
+    public void onClose() {
+        super.onClose();
+        if (ClientProxy.activeGui == this) ClientProxy.activeGui = null;
+    }
+
+    private static int getScreenWidth() {
+        Minecraft mc = Minecraft.getMinecraft();
+        return new ScaledResolution(mc, mc.displayWidth, mc.displayHeight).getScaledWidth();
+    }
+
+    private static int getScreenHeight() {
+        Minecraft mc = Minecraft.getMinecraft();
+        return new ScaledResolution(mc, mc.displayWidth, mc.displayHeight).getScaledHeight();
+    }
+
+    private class ChatAreaWidget extends Widget<ChatAreaWidget> implements Interactable {
+
+        @Override
+        public void draw(ModularGuiContext context, WidgetThemeEntry<?> theme) {
+            // Clip to the widget area so long/unwrapped lines cannot overflow over the
+            // input row, the top buttons, or off-screen.
+            Stencil.applyAtZero(getArea(), context);
+            try {
+                int lh = Minecraft.getMinecraft().fontRenderer.FONT_HEIGHT + 2;
+                List<String> d = getDisplay();
+                int maxVisible = Math.max(1, (getArea().height - 4) / lh);
+                int maxOffset = Math.max(0, d.size() - maxVisible);
+                if (scrollOffset > maxOffset) scrollOffset = maxOffset;
+                if (scrollOffset < 0) scrollOffset = 0;
+                int end = d.size() - 1 - scrollOffset;
+                int y = getArea().height - 4;
+                for (int i = end; i >= 0 && y > 0; i--) {
+                    String l = d.get(i);
+                    int c = 0xFFCCC8B8;
+                    if (l.startsWith("§b") || l.startsWith("§f§b")) c = 0xFF88ccff;
+                    else if (l.startsWith("§e") || l.startsWith("§f§e")) c = 0xFFf0a500;
+                    else if (l.startsWith("§c")) c = 0xFFe94560;
+                    y -= lh;
+                    Minecraft.getMinecraft().fontRenderer.drawString(l, 2, y, c, false);
+                }
+                if (scrollOffset > 0) {
+                    String hint = StatCollector.translateToLocalFormatted("talkwith.gui.scroll_hint", scrollOffset);
+                    Minecraft.getMinecraft().fontRenderer.drawString(hint, 2, 0, 0xFFf0a500, false);
+                }
+            } finally {
+                Stencil.remove();
             }
         }
-    }
 
-    /** Resets the scroll offset so the most recent lines are visible. */
-    private void scrollToBottom() {
-        scrollOffset = 0;
-    }
-
-    @Override
-    public void updateScreen() {
-        thinkingTick++;
-        inputField.updateCursorCounter();
-    }
-
-    @Override
-    public void handleMouseInput() {
-        super.handleMouseInput();
-        int wheel = Mouse.getEventDWheel();
-        if (wheel != 0) {
-            // Scroll up (wheel > 0) increases offset (shows older lines)
-            scrollOffset += wheel > 0 ? 1 : -1;
+        @Override
+        public boolean onMouseScroll(UpOrDown scrollDirection, int amount) {
+            scrollOffset += scrollDirection.isUp() ? -amount : amount;
+            return true;
         }
-    }
 
-    /**
-     * InputFix-style patch: vanilla {@code GuiScreen.handleKeyboardInput} only fires
-     * {@link #keyTyped} when {@code Keyboard.getEventKeyState()} is {@code true}, which
-     * means IME-composed characters (keyCode 0, keyState false) are silently dropped.
-     * Full-width symbols like （ ） from a Chinese IME are composed this way.
-     * We intercept these events and forward them to {@link #keyTyped} before delegating
-     * the rest of the work to {@code super}, which handles normal keys and housekeeping.
-     */
-    @Override
-    public void handleKeyboardInput() {
-        char c = Keyboard.getEventCharacter();
-        int k = Keyboard.getEventKey();
-        if (!Keyboard.getEventKeyState() && k == 0 && Character.isDefined(c)) {
-            keyTyped(c, k);
+        private List<String> getDisplay() {
+            List<String> d = new ArrayList<>(lines);
+            if (isThinking) {
+                if (System.currentTimeMillis() - thinkingSince > THINKING_TIMEOUT_MS) {
+                    isThinking = false;
+                } else {
+                    StringBuilder dots = new StringBuilder();
+                    for (int d2 = 0; d2 < (thinkingTick / 10) % 4; d2++) dots.append('.');
+                    d.add("§7" + StatCollector.translateToLocal("talkwith.gui.thinking") + dots);
+                }
+            }
+            return d;
         }
-        super.handleKeyboardInput();
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
-        return false;
     }
 }
